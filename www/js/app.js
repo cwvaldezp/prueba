@@ -250,9 +250,11 @@
           sfx.stroke();
           setTraceMsg('¡Bien! Ahora el trazo ' + (n + 1) + ' de ' + total + ' 🟢');
         },
-        onKeepGoing: function () { setTraceMsg('¡Sigue el caminito hasta la flecha! ➡️'); },
-        onRetry: function () {
-          setTraceMsg('¡Casi! Sigue el dedito 👆 y vuelve a intentarlo');
+        onRetry: function (why) {
+          setTraceMsg(why === 'short'
+            ? '¡Casi! Llega hasta la flecha ➡️ Inténtalo otra vez'
+            : '¡Casi! Sigue el dedito 👆 y vuelve a intentarlo');
+          say('Casi. Inténtalo otra vez');
           shakeCanvas();
         },
         onDone: function (img) {

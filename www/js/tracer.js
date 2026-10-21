@@ -204,6 +204,19 @@
       ctx.fillText(String(this.current + 1), start[0], start[1] + 0.5);
     }
 
+    // Lo que se escribió mal se desvanece en rojo.
+    var FADE = 800;
+    if (this.failed && now - this.failedAt < FADE) {
+      ctx.globalAlpha = 1 - (now - this.failedAt) / FADE;
+      ctx.lineWidth = 6 * s;
+      ctx.strokeStyle = '#ff5c5c';
+      this.failed.forEach(function (line) {
+        self.path(line);
+        ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
+    }
+
     // Tinta del niño.
     ctx.lineWidth = 6 * s;
     ctx.strokeStyle = '#1f4e9c';
@@ -283,13 +296,16 @@
       if (this.opts.onDone) this.opts.onDone(this.snapshot());
       return true;
     }
+    this.erase();
     return false;
   };
 
   // Pasa del modo libre al modo con guía, empezando de cero.
   Tracer.prototype.showGuide = function () {
+    var failed = this.failed;
     this.free = false;
     this.reset();
+    this.failed = failed; // que se vea en rojo lo que no salió
   };
 
   Tracer.prototype.check = function () {
@@ -303,13 +319,13 @@
     }).length / target.length;
     var precise = inkPts.filter(function (p) { return distToPolyline(p, target) < TOLERANCE * 1.5; }).length / inkPts.length;
 
-    if (precise < PRECISION_MIN) {
-      this.pending = [];
-      this.guideStart = performance.now();
-      if (this.opts.onRetry) this.opts.onRetry();
+    // Si se salió del camino o no llegó hasta la flecha, se borra para intentarlo de nuevo.
+    if (precise < PRECISION_MIN || covered < COVERAGE_OK) {
+      this.erase();
+      if (this.opts.onRetry) this.opts.onRetry(precise < PRECISION_MIN ? 'off' : 'short');
       return;
     }
-    if (covered >= COVERAGE_OK) {
+    {
       this.accepted = this.accepted.concat(this.pending);
       this.pending = [];
       this.current++;
@@ -320,9 +336,15 @@
       } else if (this.opts.onStroke) {
         this.opts.onStroke(this.current);
       }
-    } else if (this.opts.onKeepGoing) {
-      this.opts.onKeepGoing();
     }
+  };
+
+  // Borra lo que se escribió mal, mostrándolo un momento en rojo para que el niño lo vea.
+  Tracer.prototype.erase = function () {
+    this.failed = this.pending;
+    this.failedAt = performance.now();
+    this.pending = [];
+    this.guideStart = performance.now();
   };
 
   // Vuelve a empezar la letra desde el primer trazo.
@@ -330,6 +352,7 @@
     this.current = 0;
     this.accepted = [];
     this.pending = [];
+    this.failed = null;
     this.finished = false;
     this.guideStart = performance.now();
   };
