@@ -1,0 +1,17 @@
+{
+  "name": "ahorcado-ninos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "¡Que no se caiga! El ahorcado para niños que aprenden a escribir.",
+  "scripts": {
+    "start": "npx --yes serve www -l 8080",
+    "android": "npx cap sync android && npx cap open android",
+    "ios": "npx cap sync ios && npx cap open ios"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0"
+  }
+}

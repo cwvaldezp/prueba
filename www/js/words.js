@@ -1,0 +1,42 @@
+/*
+ * Lista de imágenes del juego. Para agregar una nueva basta con añadir
+ * una línea { word: 'PALABRA', emoji: '🙂' } (palabra en MAYÚSCULAS y sin tildes).
+ */
+window.WORDS = [
+  { word: 'GATO', emoji: '🐱' },
+  { word: 'PERRO', emoji: '🐶' },
+  { word: 'PEZ', emoji: '🐟' },
+  { word: 'OSO', emoji: '🐻' },
+  { word: 'MONO', emoji: '🐵' },
+  { word: 'RANA', emoji: '🐸' },
+  { word: 'PATO', emoji: '🦆' },
+  { word: 'VACA', emoji: '🐮' },
+  { word: 'CERDO', emoji: '🐷' },
+  { word: 'ABEJA', emoji: '🐝' },
+  { word: 'PULPO', emoji: '🐙' },
+  { word: 'TORTUGA', emoji: '🐢' },
+  { word: 'BALLENA', emoji: '🐳' },
+  { word: 'CABALLO', emoji: '🐴' },
+  { word: 'POLLITO', emoji: '🐤' },
+  { word: 'SOL', emoji: '☀️' },
+  { word: 'LUNA', emoji: '🌙' },
+  { word: 'NUBE', emoji: '☁️' },
+  { word: 'ESTRELLA', emoji: '⭐' },
+  { word: 'FLOR', emoji: '🌸' },
+  { word: 'CASA', emoji: '🏠' },
+  { word: 'UVA', emoji: '🍇' },
+  { word: 'PERA', emoji: '🍐' },
+  { word: 'PIÑA', emoji: '🍍' },
+  { word: 'FRESA', emoji: '🍓' },
+  { word: 'MANZANA', emoji: '🍎' },
+  { word: 'HELADO', emoji: '🍦' },
+  { word: 'TORTA', emoji: '🎂' },
+  { word: 'AUTO', emoji: '🚗' },
+  { word: 'TREN', emoji: '🚂' },
+  { word: 'BARCO', emoji: '⛵' },
+  { word: 'COHETE', emoji: '🚀' },
+  { word: 'PELOTA', emoji: '⚽' },
+  { word: 'GLOBO', emoji: '🎈' },
+  { word: 'REGALO', emoji: '🎁' },
+  { word: 'LIBRO', emoji: '📖' }
+];
