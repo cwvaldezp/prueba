@@ -1,5 +1,5 @@
 // Guarda el juego en el teléfono para que funcione sin internet.
-var CACHE = 'ahorcado-v2';
+var CACHE = 'ahorcado-v3';
 var FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
   'js/letters.js', 'js/words.js', 'js/figure.js', 'js/tracer.js', 'js/app.js',

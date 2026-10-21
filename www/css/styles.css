@@ -131,6 +131,19 @@ h2 { margin: 0; font-size: clamp(20px, 5.5vw, 28px); text-align: center; }
   display: flex; align-items: flex-end; justify-content: center;
 }
 .slot img { width: 100%; height: auto; animation: pop .4s ease-out; }
+/* Letras que no estaban, escritas por el niño y tachadas con una X roja */
+.misses { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; min-height: 8px; margin: 8px 0 4px; }
+.miss {
+  position: relative; width: clamp(40px, 11vw, 58px); animation: pop .4s ease-out;
+  background: #fff; border-radius: 10px; padding: 2px; box-shadow: 0 2px 0 #f3d4d4;
+}
+.miss img { width: 100%; height: auto; display: block; }
+.miss::before, .miss::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 95%; height: 3px;
+  background: var(--no); border-radius: 2px; opacity: .8;
+}
+.miss::before { transform: translate(-50%, -50%) rotate(45deg); }
+.miss::after { transform: translate(-50%, -50%) rotate(-45deg); }
 .slot.reveal span { font-size: clamp(30px, 8vw, 50px); font-weight: bold; color: var(--no); }
 
 .keyboard {

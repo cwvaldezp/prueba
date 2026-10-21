@@ -9,10 +9,10 @@ El juego del ahorcado para niños que están aprendiendo a escribir. Funciona en
 1. El niño elige una imagen secreta (🐱, 🐶, 🚗…) y aparecen las rayitas de las letras.
 2. El otro jugador dice una letra y el niño la toca en el teclado.
 3. El niño responde **"✅ ¡Sí está!"** o **"❌ No está"**. Si se equivoca, el juego le corrige con cariño.
-4. Si la letra está, **el niño la tiene que escribir**: aparece un caminito con un punto verde 🟢
+4. **Esté o no la letra, el niño la tiene que escribir** (así practica todas): aparece un caminito con un punto verde 🟢
    donde empieza cada trazo, una flecha y un dedito 👆 que le enseña el movimiento.
    Cuando la termina, **su propia letra se coloca sobre las rayitas** correspondientes.
-5. Si no está, se va dibujando el chico o la chica en el trampolín. Con 6 errores… ¡se cae a la piscina! 💦
+5. Si no está, su letra se pone **abajo con una ✗ roja** y se va dibujando el chico o la chica en el trampolín. Con 6 errores… ¡se cae a la piscina! 💦
 
 **✏️ Dibujar mi imagen**: en la lista de imágenes, la primera opción permite que el niño **dibuje** su
 imagen secreta con colores. Después un adulto escribe qué es (por ejemplo "piña") y salen las rayitas.

@@ -133,6 +133,7 @@
       : '¿Qué letra crees que tiene? Tócala 👇';
 
     $('slots').innerHTML = state.letters.map(function (_, i) { return '<div class="slot" data-i="' + i + '"></div>'; }).join('');
+    $('misses').innerHTML = '';
 
     var kb = $('keyboard');
     kb.innerHTML = '';
@@ -186,7 +187,7 @@
       var fb = $('ask-feedback');
       if (saysYes === really) {
         fb.style.color = 'var(--yes)';
-        fb.textContent = really ? '¡Muy bien! Ahora escríbela ✏️' : '¡Correcto! No está 👍';
+        fb.textContent = really ? '¡Muy bien! Ahora escríbela ✏️' : '¡Correcto! No está, pero igual escríbela ✏️';
         setTimeout(function () { closeOverlay('ask'); resolveLetter(l); }, 900);
       } else {
         // Corrección suave: le ayudamos a revisar su palabra.
@@ -200,37 +201,42 @@
     $('btn-no').onclick = function () { answer(false); };
   }
 
+  // Toda letra se escribe a mano, esté o no en la palabra, para practicarlas todas.
   function resolveLetter(l) {
     state.used[l] = true;
     var key = document.querySelector('[data-letter="' + l + '"]');
     key.disabled = true;
+    var found = state.letters.indexOf(l) !== -1;
+    key.classList.add(found ? 'good' : 'bad');
+    (found ? sfx.good : sfx.bad)();
+    openTracer(l, found);
+  }
 
-    if (state.letters.indexOf(l) !== -1) {
-      key.classList.add('good');
-      sfx.good();
-      openTracer(l);
-    } else {
-      key.classList.add('bad');
-      state.errors++;
-      sfx.bad();
-      say(state.mode === 'pick' ? 'No está' : 'Esa no está');
-      renderFigure(false);
-      if (state.errors >= window.MAX_ERRORS) lose();
-    }
+  // Letra que no estaba: va abajo con una X roja y se dibuja una parte más.
+  function placeMiss(l, img) {
+    var m = document.createElement('div');
+    m.className = 'miss';
+    m.innerHTML = '<img alt="' + disp(l) + '" src="' + img + '">';
+    $('misses').appendChild(m);
+    state.errors++;
+    sfx.bad();
+    renderFigure(false);
+    if (state.errors >= window.MAX_ERRORS) lose();
   }
 
   /* ---------- Escribir la letra ---------- */
-  function openTracer(l) {
+  function openTracer(l, found) {
     var free = settings.write === 'free';
     openOverlay('trace');
     $('trace-model').textContent = disp(l);
     var name = 'la ' + disp(l);
+    var intro = found ? '' : 'No está, pero igual escríbela. ';
     if (free) {
-      setTraceMsg('Escribe ' + name + ' y toca Listo ✅');
-      say('Escribe ' + letterName(l));
+      setTraceMsg(intro + 'Escribe ' + name + ' y toca Listo ✅');
+      say(intro + 'Escribe ' + letterName(l));
     } else {
-      setTraceMsg('Escribe ' + name + '. Empieza en el punto verde 🟢');
-      say('Escribe ' + letterName(l) + '. Empieza en el punto verde');
+      setTraceMsg(intro + 'Escribe ' + name + '. Empieza en el punto verde 🟢');
+      say(intro + 'Escribe ' + letterName(l) + '. Empieza en el punto verde');
     }
 
     var canvas = $('trace-canvas');
@@ -255,7 +261,8 @@
           say('¡Excelente!');
           setTimeout(function () {
             closeTracer();
-            placeLetter(l, img);
+            if (found) placeLetter(l, img);
+            else placeMiss(l, img);
           }, 1100);
         }
       });
