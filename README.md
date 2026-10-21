@@ -32,8 +32,9 @@ El juego dice las letras en voz alta ("¿Tu palabra tiene la ge?").
 
 ### Voz
 Si el navegador tiene voz en español (Chrome, Safari) se usa esa. Si no (por ejemplo la app de Claude en
-Android), se tocan las grabaciones de `www/js/voice-clips.js`. Al cambiar frases o palabras hay que
-regrabarlas: `pip install espeakng-loader` y `python3 tools/generar-voz.py`.
+Android), se tocan las grabaciones de `www/js/voice-clips.js`, hechas con la voz "carlfm" de
+[Piper](https://github.com/rhasspy/piper) (dominio público). Al cambiar frases o palabras hay que
+regrabarlas: `pip install piper-tts` y `python3 tools/generar-voz.py`.
 
 ## Probarlo en la computadora
 

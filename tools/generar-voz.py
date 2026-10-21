@@ -6,14 +6,23 @@ Se usa cuando el navegador del teléfono no tiene voz propia (por ejemplo, la
 app de Claude en Android). Graba las frases de www/js/phrases.js, el nombre de
 cada letra, las pistas de categoría y las palabras de www/js/words.js.
 
-Requisitos: node, ffmpeg y `pip install espeakng-loader`.
+Voz: "carlfm" de Piper (español, dominio público). La primera vez se descarga
+en tools/voces/ (unos 19 MB, no se guarda en git).
+
+Requisitos: node, ffmpeg y `pip install piper-tts`.
 Uso: python3 tools/generar-voz.py
 """
-import base64, ctypes, json, os, subprocess, tempfile, wave
+import base64, json, os, subprocess, tarfile, tempfile, urllib.request, wave
 
-import espeakng_loader
+from piper import PiperVoice, SynthesisConfig
 
-ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'www')
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.join(HERE, '..', 'www')
+VOICE = 'es-carlfm-x-low'
+VOICE_URL = 'https://github.com/rhasspy/piper/releases/download/v0.0.2/voice-%s.tar.gz' % VOICE
+VOICE_DIR = os.path.join(HERE, 'voces', VOICE)
+# Un poco más despacio que lo normal (1.0) para que un niño de 5 años la entienda bien.
+SPEED = SynthesisConfig(length_scale=1.3)
 
 # Lista de lo que hay que grabar, leída de los mismos archivos que usa el juego.
 LIST_JS = r"""
@@ -30,42 +39,34 @@ console.log(JSON.stringify(clips));
 """
 
 
+def load_voice():
+    model = os.path.join(VOICE_DIR, VOICE + '.onnx')
+    if not os.path.exists(model):
+        os.makedirs(VOICE_DIR, exist_ok=True)
+        print('Descargando la voz', VOICE, '...')
+        archive = os.path.join(VOICE_DIR, 'voz.tar.gz')
+        urllib.request.urlretrieve(VOICE_URL, archive)
+        with tarfile.open(archive) as t:
+            t.extractall(VOICE_DIR, filter='data')
+        os.remove(archive)
+    return PiperVoice.load(model)
+
+
 def main():
     clips = json.loads(subprocess.check_output(['node', '-e', LIST_JS, ROOT]))
-
-    lib = ctypes.CDLL(espeakng_loader.get_library_path())
-    callback_type = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(ctypes.c_short), ctypes.c_int, ctypes.c_void_p)
-    samples = []
-
-    def collect(wav, n, _events):
-        if wav and n > 0:
-            samples.extend(wav[:n])
-        return 0
-
-    collect_cb = callback_type(collect)
-    rate = lib.espeak_Initialize(2, 0, espeakng_loader.get_data_path().encode(), 0)  # 2 = síncrono
-    lib.espeak_SetSynthCallback(collect_cb)
-    lib.espeak_SetVoiceByName(b'es-419')  # español latinoamericano
-    lib.espeak_SetParameter(1, 135, 0)    # velocidad (palabras por minuto)
-    lib.espeak_SetParameter(3, 60, 0)     # tono
+    voice = load_voice()
 
     out = {}
     with tempfile.TemporaryDirectory() as tmp:
         for key, text in clips.items():
-            samples.clear()
-            data = text.encode()
-            lib.espeak_Synth(data, len(data) + 1, 0, 1, 0, 1, None, None)  # 1 = UTF-8
-            lib.espeak_Synchronize()
             wav_path, mp3_path = os.path.join(tmp, 'c.wav'), os.path.join(tmp, 'c.mp3')
             with wave.open(wav_path, 'wb') as w:
-                w.setnchannels(1)
-                w.setsampwidth(2)
-                w.setframerate(rate)
-                w.writeframes((ctypes.c_short * len(samples))(*samples))
-            # Quitamos el silencio del final y comprimimos (mono, 32 kbps).
+                voice.synthesize_wav(text, w, syn_config=SPEED)
+            # Quitamos el silencio del principio y del final y comprimimos (mono, 32 kbps).
+            trim = 'silenceremove=start_periods=1:start_threshold=-50dB'
             subprocess.run(['ffmpeg', '-loglevel', 'error', '-y', '-i', wav_path,
-                            '-af', 'areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse',
-                            '-ac', '1', '-ar', '22050', '-b:a', '32k', mp3_path], check=True)
+                            '-af', '%s,areverse,%s,areverse' % (trim, trim),
+                            '-ac', '1', '-b:a', '32k', mp3_path], check=True)
             with open(mp3_path, 'rb') as f:
                 out[key] = 'data:audio/mpeg;base64,' + base64.b64encode(f.read()).decode()
 
