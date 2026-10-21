@@ -54,14 +54,16 @@ Abrir http://localhost:8080
 
 Queda con su ícono y funciona sin internet.
 
-## App nativa (Play Store / App Store)
+## App de Android (APK)
 
-```bash
-npm install
-npx cap add android   # requiere Android Studio
-npx cap add ios       # requiere una Mac con Xcode
-npm run android       # o: npm run ios
-```
+GitHub arma el APK solo (`.github/workflows/android.yml`) cada vez que cambia el juego y lo deja en:
+**https://github.com/cwvaldezp/prueba/releases/download/android/que-no-se-caiga.apk**
+
+Para instalarlo, abrir ese enlace desde el teléfono Android, descargar y abrir el archivo, y permitir
+"instalar apps de fuentes desconocidas" cuando lo pida. Las versiones nuevas se instalan encima.
+
+La clave de firma (`tools/android/que-no-se-caiga.keystore`) es sólo para esta app familiar; no sirve para
+publicar en Play Store. Para armarlo en una computadora con Android Studio: `npm install` y `npm run android`.
 
 ## Personalizar
 

@@ -2,7 +2,8 @@
   var $ = function (id) { return document.getElementById(id); };
 
   // gender: chico/chica · case: upper/lower (mayúsculas o minúsculas) · write: guided/free
-  var settings = { gender: 'chico', case: 'upper', write: 'guided' };
+  // voice: on/off (la voz que habla) · sfx: on/off (los efectos de sonido)
+  var settings = { gender: 'chico', case: 'upper', write: 'guided', voice: 'on', sfx: 'on' };
   Object.keys(settings).forEach(function (k) {
     try { settings[k] = localStorage.getItem(k) || settings[k]; } catch (e) { /* sin almacenamiento */ }
   });
@@ -14,6 +15,7 @@
   /* ---------- Sonido y voz ---------- */
   var audio = null;
   function tone(freqs, dur) {
+    if (settings.sfx === 'off') return;
     try {
       audio = audio || new (window.AudioContext || window.webkitAudioContext)();
       freqs.forEach(function (f, i) {
@@ -62,8 +64,18 @@
     } catch (e) { return null; }
   }
 
+  // Habla sólo si la voz está encendida.
   function say() {
-    var parts = Array.prototype.slice.call(arguments);
+    if (settings.voice === 'off') return;
+    speak(Array.prototype.slice.call(arguments));
+  }
+
+  // Habla siempre: cuando el niño toca "Escuchar" o la pista, aunque la voz esté apagada.
+  function sayAlways() {
+    speak(Array.prototype.slice.call(arguments));
+  }
+
+  function speak(parts) {
     stopVoice();
     var voice = spanishVoice();
     if (voice) speakTTS(parts, voice);
@@ -156,7 +168,41 @@
       c.classList.toggle('selected', settings[c.getAttribute('data-setting')] === c.getAttribute('data-value'));
     });
     document.body.classList.toggle('lower-case', isLower());
+    renderSound();
   }
+
+  /* ---------- Voz y sonidos encendidos/apagados ---------- */
+  function saveSetting(key, value) {
+    settings[key] = value;
+    try { localStorage.setItem(key, value); } catch (e) { /* sin almacenamiento */ }
+  }
+  function renderSound() {
+    document.querySelectorAll('[data-toggle]').forEach(function (b) {
+      var on = settings[b.getAttribute('data-toggle')] === 'on';
+      b.classList.toggle('selected', on);
+      b.setAttribute('aria-pressed', on);
+      b.querySelector('.state').textContent = on ? 'Sí' : 'No';
+    });
+    var any = settings.voice === 'on' || settings.sfx === 'on';
+    $('btn-mute').textContent = any ? '🔊' : '🔇';
+    $('btn-mute').setAttribute('aria-label', any ? 'Quitar sonido' : 'Poner sonido');
+  }
+  document.querySelectorAll('[data-toggle]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var key = b.getAttribute('data-toggle');
+      saveSetting(key, settings[key] === 'on' ? 'off' : 'on');
+      if (settings[key] === 'off' && key === 'voice') stopVoice();
+      renderSound();
+    });
+  });
+  // Botón rápido en el juego: apaga o enciende todo de una vez.
+  $('btn-mute').addEventListener('click', function () {
+    var value = settings.voice === 'on' || settings.sfx === 'on' ? 'off' : 'on';
+    saveSetting('voice', value);
+    saveSetting('sfx', value);
+    if (value === 'off') stopVoice();
+    renderSound();
+  });
   document.querySelectorAll('.chip').forEach(function (c) {
     c.addEventListener('click', function () {
       var key = c.getAttribute('data-setting');
@@ -232,7 +278,7 @@
   }
 
   $('hint-cat').addEventListener('click', function () {
-    if (state && state.cat) say({ cat: state.cat });
+    if (state && state.cat) sayAlways({ cat: state.cat });
   });
 
   function renderFigure(fallen) {
@@ -414,7 +460,7 @@
     setTraceMsg(tracer.free ? 'Escribe la letra y toca Listo ✅' : 'Empieza en el punto verde 🟢');
   });
   $('btn-trace-say').addEventListener('click', function () {
-    if (tracer) say('escribe', { l: tracer.letter });
+    if (tracer) sayAlways('escribe', { l: tracer.letter });
   });
 
   function placeLetter(l, img) {

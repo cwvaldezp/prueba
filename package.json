@@ -5,8 +5,7 @@
   "description": "¡Que no se caiga! El ahorcado para niños que aprenden a escribir.",
   "scripts": {
     "start": "npx --yes serve www -l 8080",
-    "android": "npx cap sync android && npx cap open android",
-    "ios": "npx cap sync ios && npx cap open ios"
+    "android": "npx cap add android; npx --yes @capacitor/assets@3.0.5 generate --android && npx cap sync android && npx cap open android"
   },
   "devDependencies": {
     "@capacitor/android": "^7.0.0",

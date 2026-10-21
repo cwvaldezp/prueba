@@ -37,6 +37,11 @@
         <button class="chip" data-setting="write" data-value="guided">👆 Con caminito</button>
         <button class="chip" data-setting="write" data-value="free">✏️ Libre</button>
       </div>
+      <p class="label">¿Con sonido?</p>
+      <div class="chips">
+        <button class="chip" data-toggle="voice">🗣️ Voz: <span class="state">Sí</span></button>
+        <button class="chip" data-toggle="sfx">🎵 Sonidos: <span class="state">Sí</span></button>
+      </div>
     </div>
 
     <button id="btn-mode-pick" class="big-btn primary">🖼️ Yo elijo la imagen</button>
@@ -90,6 +95,7 @@
     <header class="bar">
       <button class="icon-btn" data-go="home" aria-label="Inicio">🏠</button>
       <button id="btn-peek" class="peek-btn" aria-label="Ver mi imagen">👀 <span id="peek-emoji" class="peek-emoji">❔</span></button>
+      <button id="btn-mute" class="icon-btn" aria-label="Quitar sonido">🔊</button>
       <span id="lives" class="lives"></span>
     </header>
     <div id="figure" class="figure"></div>
