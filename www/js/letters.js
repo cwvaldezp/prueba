@@ -108,10 +108,75 @@
     Z: [[[32, 45], [68, 45], [32, 80], [68, 80]]]
   };
 
+  /*
+   * Cursiva (letra ligada), sólo minúsculas, en los mismos renglones que abc.
+   * Cada letra entra desde abajo a la izquierda y sale hacia la derecha para
+   * poder unirse con la siguiente. Se dibujan con curvas de Bézier.
+   */
+  function cubic(p0, p1, p2, p3, steps) {
+    steps = steps || 16;
+    var pts = [];
+    for (var i = 0; i <= steps; i++) {
+      var t = i / steps, u = 1 - t;
+      pts.push([
+        u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0],
+        u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1]
+      ]);
+    }
+    return pts;
+  }
+  // Subida de entrada: desde la línea base, a la izquierda, hasta el punto p.
+  function lead(p) { return cubic([16, 80], [26, 82], [p[0] - 8, p[1] + 14], p, 12); }
+  // Salida hacia la derecha desde el punto p (abajo), para unirse a la siguiente letra.
+  function exit(p) { return cubic(p, [p[0] + 1, p[1] + 8], [p[0] + 10, p[1] + 8], [84, 68], 12); }
+  // Salida alta (después de o, b, v, w), a la altura de la línea media.
+  function exitHigh(p) { return cubic(p, [p[0] + 6, p[1] - 2], [p[0] + 12, p[1] - 2], [84, 46], 10); }
+  // Bucle alto de b, h, k, l, f: sube desde la base y baja por x.
+  function loopUp(x) {
+    return join(cubic([16, 80], [34, 74], [x + 16, 44], [x + 12, 18], 16), cubic([x + 12, 18], [x + 10, 6], [x - 2, 8], [x, 24], 10));
+  }
+  var oval = function (from) { return arc(48, 63, 13, 17, from, from - 360, 30); };
+  var ovalA = oval(-40);  // a, d, g, q empiezan arriba a la derecha del óvalo, sin subida
+  var hump = function (x0, x1) {                                 // puente de n, m, h
+    return join(cubic([x0, 80], [x0, 52], [x0 + 6, 45], [(x0 + x1) / 2, 45], 10), cubic([(x0 + x1) / 2, 45], [x1 - 2, 45], [x1, 52], [x1, 62], 8));
+  };
+  var cn = join(lead([30, 45]), [[30, 80]], hump(30, 60), [[60, 74]], exit([60, 74]));
+
+  var CURSIVE = {
+    A: [join(ovalA, [[62, 45], [62, 74]], exit([62, 74]))],
+    B: [join(loopUp(40), [[40, 74]], cubic([40, 74], [42, 84], [62, 82], [62, 62]), cubic([62, 62], [62, 52], [56, 47], [52, 50], 8), exitHigh([52, 50]))],
+    C: [join(arc(48, 63, 13, 17, -50, -300, 24), cubic([54.5, 77.7], [60, 80], [70, 78], [84, 68], 10))],
+    D: [join(ovalA, [[62, 45], [62, 10], [62, 74]], exit([62, 74]))],
+    E: [join(cubic([18, 76], [40, 72], [62, 62], [56, 50]), cubic([56, 50], [50, 40], [34, 44], [34, 60]), cubic([34, 60], [34, 78], [52, 84], [84, 68]))],
+    F: [join(loopUp(40), [[40, 104]], cubic([40, 104], [40, 114], [58, 106], [54, 86]), cubic([54, 86], [58, 78], [68, 74], [84, 68]))],
+    G: [join(ovalA, [[62, 45], [62, 98]], cubic([62, 98], [62, 112], [42, 112], [45, 98]), cubic([45, 98], [48, 86], [66, 80], [84, 70]))],
+    H: [join(loopUp(36), [[36, 80]], hump(36, 62), [[62, 74]], exit([62, 74]))],
+    I: [join(lead([46, 45]), [[46, 74]], exit([46, 74])), [[46, 30]]],
+    J: [join(lead([48, 45]), [[48, 100]], cubic([48, 100], [48, 112], [32, 110], [35, 98]), cubic([35, 98], [38, 86], [62, 80], [84, 70])), [[48, 30]]],
+    K: [join(loopUp(36), [[36, 80]], cubic([36, 80], [36, 56], [56, 42], [60, 50]), cubic([60, 50], [64, 60], [48, 64], [44, 62]), cubic([44, 62], [56, 66], [62, 78], [84, 68]))],
+    L: [join(loopUp(40), cubic([40, 24], [40, 44], [40, 62], [42, 74]), exit([42, 74]))],
+    M: [join(lead([24, 45]), [[24, 80]], hump(24, 44), [[44, 80]], hump(44, 64), [[64, 74]], exit([64, 74]))],
+    N: [cn],
+    Ñ: [cn, [[36, 32], [43, 27], [50, 32], [57, 36], [64, 30]]],
+    O: [join(arc(48, 63, 13, 17, -90, -450, 30), exitHigh([48, 46]))],
+    P: [join(lead([36, 45]), [[36, 107], [36, 62]], cubic([36, 62], [40, 44], [64, 44], [64, 62]), cubic([64, 62], [64, 82], [42, 82], [38, 74]), cubic([38, 74], [52, 80], [68, 78], [84, 68]))],
+    Q: [join(ovalA, [[62, 45], [62, 104]], cubic([62, 104], [62, 96], [72, 86], [84, 76]))],
+    R: [join(lead([36, 46]), [[46, 44], [48, 50]], [[48, 74]], exit([48, 74]))],
+    S: [join(lead([46, 44]), cubic([46, 44], [60, 58], [62, 78], [46, 80]), cubic([46, 80], [40, 80], [36, 78], [36, 74], 6), cubic([36, 74], [46, 84], [66, 80], [84, 68]))],
+    T: [join(lead([44, 20]), [[44, 74]], exit([44, 74])), [[32, 45], [58, 45]]],
+    U: [join(lead([34, 45]), [[34, 70]], cubic([34, 70], [35, 82], [58, 84], [60, 60]), [[60, 45], [60, 74]], exit([60, 74]))],
+    V: [join(lead([34, 46]), cubic([34, 46], [38, 64], [44, 80], [50, 80]), cubic([50, 80], [58, 80], [64, 60], [64, 46]), exitHigh([64, 46]))],
+    W: [join(lead([26, 46]), [[26, 70]], cubic([26, 70], [27, 82], [44, 82], [45, 62]), [[45, 46]], cubic([45, 46], [45, 82], [64, 84], [65, 46]), exitHigh([65, 46]))],
+    X: [join(lead([30, 47]), cubic([30, 47], [44, 44], [48, 80], [64, 78]), exit([64, 78]).slice(1)), [[64, 46], [34, 80]]],
+    Y: [join(lead([32, 46]), [[32, 70]], cubic([32, 70], [33, 82], [56, 82], [58, 60]), [[58, 46], [58, 100]], cubic([58, 100], [58, 112], [42, 110], [44, 98]), cubic([44, 98], [48, 86], [66, 80], [84, 70]))],
+    Z: [join(lead([32, 46]), [[60, 46], [34, 78]], cubic([34, 78], [46, 74], [62, 78], [84, 68]))]
+  };
+
   // Renglones de cuaderno para cada tipo de letra: [altura, punteado].
   var LINES = {
     upper: [[10, false], [50, true], [90, false]],
-    lower: [[10, false], [45, true], [80, false], [107, true]]
+    lower: [[10, false], [45, true], [80, false], [107, true]],
+    cursive: [[10, false], [45, true], [80, false], [107, true]]
   };
 
   // Cómo se dice cada letra (para la voz).
@@ -124,6 +189,11 @@
 
   window.LETTERS = LETTERS;
   window.LOWER_LETTERS = LOWER;
+  window.CURSIVE_LETTERS = CURSIVE;
+  // Trazos según el tipo de letra elegido: 'upper' (ABC), 'lower' (abc) o 'cursive'.
+  window.letterSet = function (style) {
+    return style === 'cursive' ? CURSIVE : style === 'lower' ? LOWER : LETTERS;
+  };
   window.LETTER_LINES = LINES;
   window.LETTER_NAMES = NAMES;
   window.ALPHABET = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ'.split('');

@@ -21,12 +21,14 @@ imagen secreta con colores. Después un adulto escribe qué es (por ejemplo "pi�
 y, cuando acierta, también las escribe.
 
 ### Opciones en la pantalla de inicio
-- **ABC / abc:** escribir en mayúsculas o en minúsculas (cada una con sus renglones y su forma de trazarse).
+- **ABC / abc / cursiva:** escribir en mayúsculas, minúsculas o cursiva (letra ligada, minúsculas), cada una
+  con sus renglones y su forma de trazarse.
 - **👆 Con caminito / ✏️ Libre:** con caminito, el niño repasa cada trazo guiado. En modo libre escribe la
   letra solo, como en su pizarra, y toca **Listo**. Si no le sale, el juego le muestra el caminito para
   que la repase. También puede pedir **Ayuda** en cualquier momento.
 
-Al adivinar aparece una **pista** con la categoría (🐾 animal, 🍎 fruta, 🚗 transporte…); al tocarla se escucha.
+Al adivinar aparece una **pista** con la categoría; al tocarla se escucha. Hay 109 imágenes en 11 categorías
+(animales, frutas, verduras, comida, ropa, cuerpo, juguetes, instrumentos, casa, transportes y naturaleza).
 
 El juego dice las letras en voz alta ("¿Tu palabra tiene la ge?").
 
@@ -69,7 +71,7 @@ publicar en Play Store. Para armarlo en una computadora con Android Studio: `npm
 
 - **Imágenes y palabras:** `www/js/words.js` (palabra en MAYÚSCULAS, sin tildes, un emoji y su categoría);
   después regrabar la voz con `python3 tools/generar-voz.py`.
-- **Forma y orden de los trazos de cada letra (mayúsculas y minúsculas):** `www/js/letters.js`.
+- **Forma y orden de los trazos de cada letra (mayúsculas, minúsculas y cursiva):** `www/js/letters.js`.
 - **Número de errores permitidos:** `MAX_ERRORS` en `www/js/figure.js`.
 - **Cómo se revisa la letra:**
   - *Con caminito*: cada trazo debe empezar en el punto verde, avanzar hacia la flecha sin ir y venir, llegar

@@ -1,7 +1,7 @@
 (function () {
   var $ = function (id) { return document.getElementById(id); };
 
-  // gender: chico/chica · case: upper/lower (mayúsculas o minúsculas) · write: guided/free
+  // gender: chico/chica · case: upper/lower/cursive (ABC, abc o cursiva) · write: guided/free
   // voice: on/off (la voz que habla) · sfx: on/off (los efectos de sonido)
   var settings = { gender: 'chico', case: 'upper', write: 'guided', voice: 'on', sfx: 'on' };
   Object.keys(settings).forEach(function (k) {
@@ -138,7 +138,19 @@
   });
 
   function letterName(l) { return 'la ' + window.LETTER_NAMES[l]; }
-  function isLower() { return settings.case === 'lower'; }
+  function isLower() { return settings.case !== 'upper'; }
+  function isCursive() { return settings.case === 'cursive'; }
+
+  // Muestra una letra: como texto (ABC, abc) o dibujada con sus trazos (cursiva, no hay fuente fiable).
+  function letterHTML(l) {
+    if (!isCursive()) return escapeHTML(disp(l));
+    var paths = window.CURSIVE_LETTERS[l].map(function (st) {
+      if (st.length === 1) return '<circle cx="' + st[0][0] + '" cy="' + st[0][1] + '" r="4" fill="currentColor"/>';
+      return '<polyline points="' + st.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '"/>';
+    }).join('');
+    return '<svg class="cursive-letter" viewBox="8 0 84 115" aria-label="' + disp(l) + '">' +
+      '<g fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">' + paths + '</g></svg>';
+  }
   // Cómo se muestra una letra o palabra según mayúsculas/minúsculas.
   function disp(text) { return isLower() ? text.toLowerCase() : text; }
   function escapeHTML(t) { return String(t).replace(/[&<>"]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
@@ -168,6 +180,7 @@
       c.classList.toggle('selected', settings[c.getAttribute('data-setting')] === c.getAttribute('data-value'));
     });
     document.body.classList.toggle('lower-case', isLower());
+    document.body.classList.toggle('cursive', isCursive());
     renderSound();
   }
 
@@ -213,7 +226,7 @@
   });
 
   $('btn-mode-pick').addEventListener('click', function () {
-    grid.querySelectorAll('button:not(.draw-own) .name').forEach(function (n, i) { n.textContent = disp(window.WORDS[i].word); });
+    grid.querySelectorAll('.name[data-word]').forEach(function (n) { n.textContent = disp(n.getAttribute('data-word')); });
     show('pick');
     say('elige');
   });
@@ -226,11 +239,20 @@
   own.innerHTML = '<span class="emoji">✏️</span><span class="name">DIBUJAR</span>';
   own.addEventListener('click', openDraw);
   grid.appendChild(own);
-  window.WORDS.forEach(function (w) {
-    var b = document.createElement('button');
-    b.innerHTML = '<span class="emoji">' + w.emoji + '</span><span class="name">' + disp(w.word) + '</span>';
-    b.addEventListener('click', function () { startGame(w, 'pick'); });
-    grid.appendChild(b);
+  // Imágenes agrupadas por categoría, con un título por grupo.
+  Object.keys(window.CATEGORIES).forEach(function (k) {
+    var c = window.CATEGORIES[k], words = window.WORDS.filter(function (w) { return w.cat === k; });
+    if (!words.length) return;
+    var h = document.createElement('h3');
+    h.className = 'pick-group';
+    h.textContent = c.icon + ' ' + c.name;
+    grid.appendChild(h);
+    words.forEach(function (w) {
+      var b = document.createElement('button');
+      b.innerHTML = '<span class="emoji">' + w.emoji + '</span><span class="name" data-word="' + w.word + '">' + disp(w.word) + '</span>';
+      b.addEventListener('click', function () { startGame(w, 'pick'); });
+      grid.appendChild(b);
+    });
   });
 
   function randomWord() {
@@ -307,7 +329,7 @@
   /* El niño decide si la letra está en su palabra. */
   function askChild(l) {
     $('ask-emoji').innerHTML = state.pic;
-    $('ask-letter').textContent = disp(l);
+    $('ask-letter').innerHTML = letterHTML(l);
     $('ask-question').textContent = '¿Tu palabra tiene la letra ' + disp(l) + '?';
     $('ask-feedback').textContent = '';
     $('btn-yes').disabled = $('btn-no').disabled = false;
@@ -361,7 +383,7 @@
   function openTracer(l, found) {
     var free = settings.write === 'free';
     openOverlay('trace');
-    $('trace-model').textContent = disp(l);
+    $('trace-model').innerHTML = letterHTML(l);
     var name = 'la ' + disp(l);
     var intro = found ? '' : window.PHRASES.no_esta + ' ';
     var spoken = (found ? [] : ['no_esta']).concat(['escribe', { l: l }]);
@@ -374,11 +396,11 @@
     }
 
     var canvas = $('trace-canvas');
-    var total = (isLower() ? window.LOWER_LETTERS : window.LETTERS)[l].length;
+    var total = window.letterSet(settings.case)[l].length;
     // Esperamos a que la ventana tenga tamaño antes de crear la pizarra.
     requestAnimationFrame(function () {
       tracer = new window.Tracer(canvas, l, {
-        lower: isLower(),
+        style: settings.case,
         free: free,
         onStroke: function (n) {
           sfx.stroke();
@@ -493,7 +515,7 @@
       if (state.found[i]) return;
       var slot = document.querySelector('.slot[data-i="' + i + '"]');
       slot.classList.add('reveal');
-      slot.innerHTML = '<span>' + c + '</span>';
+      slot.innerHTML = '<span>' + letterHTML(c) + '</span>';
     });
     var pick = state.mode === 'pick';
     setTimeout(function () {
@@ -635,7 +657,7 @@
     var c = window.CATEGORIES[k], b = document.createElement('button');
     b.className = 'chip';
     b.setAttribute('data-cat', k);
-    b.textContent = c.icon + ' ' + c.label.replace(/^Es (un |una )?|^Está en la /, '');
+    b.textContent = c.icon + ' ' + c.name;
     b.addEventListener('click', function () {
       draw.cat = draw.cat === k ? null : k;
       $('word-cats').querySelectorAll('.chip').forEach(function (x) {

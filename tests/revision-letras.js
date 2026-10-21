@@ -22,10 +22,10 @@ function backAndForth(line) { const r = R(line), out = []; for (let k = 0; k < 3
 
 const res = { guidedOk: [], guidedScribble: [], guidedBlob: [], guidedReverse: [], freeOk: [], freeOrder: [], freeZig: [], freeRetrace: [], freeBlob: [] };
 let confusions = [];
-for (const lower of [false, true]) {
-  const set = lower ? ctx.LOWER_LETTERS : ctx.LETTERS;
+for (const style of ['upper', 'lower', 'cursive']) {
+  const set = ctx.letterSet(style), lower = style !== 'upper';
   for (const L of ctx.ALPHABET) {
-    const name = lower ? L.toLowerCase() : L;
+    const name = (style === 'cursive' ? '~' : '') + (lower ? L.toLowerCase() : L);
     const strokes = set[L].map(R);
     OTHERS = ctx.ALPHABET.filter(k => k !== L).map(k => set[k].map(R));
     strokes.forEach((st, i) => {
@@ -57,17 +57,17 @@ for (const lower of [false, true]) {
     for (const M of ctx.ALPHABET) {
       if (M === L) continue;
       const other = set[M].map(R).map(st => wobble(st, 2));
-      if (!G.gradeLetter(other, strokes)) confusions.push((lower ? M.toLowerCase() : M) + '→' + name);
+      if (!G.gradeLetter(other, strokes)) confusions.push((style === 'cursive' ? '~' : '') + (lower ? M.toLowerCase() : M) + '→' + name);
     }
   }
 }
 for (const k in res) console.log(k.padEnd(15), res[k].length, res[k].slice(0, 30).join(' '));
-console.log('otra letra aceptada:', confusions.length, 'de', 2 * 27 * 26, '\n', confusions.join(' '));
+console.log('otra letra aceptada:', confusions.length, 'de', 3 * 27 * 26, '\n', confusions.join(' '));
 
 // Letras correctas que se rechazan y garabatos que se aceptan son fallas.
 // (Zigzag en I, i, l es sólo una raya: es la letra misma.)
 const fallas = res.guidedOk.length + res.freeOk.length + res.guidedScribble.length + res.guidedBlob.length +
   res.guidedReverse.length + res.freeRetrace.length + res.freeBlob.length +
   res.freeZig.filter(n => !'Iil'.includes(n)).length;
-if (fallas || confusions.length > 10) { console.log('FALLÓ'); process.exit(1); }
+if (fallas || confusions.length > 15) { console.log('FALLÓ'); process.exit(1); }
 console.log('OK');

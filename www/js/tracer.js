@@ -108,7 +108,7 @@
     var idx = 0, off = 0, last = target.length - 1;
     pts.forEach(function (p) {
       var best = Infinity, bestJ = idx;
-      for (var j = Math.max(0, idx - 2); j <= Math.min(last, idx + 6); j++) {
+      for (var j = Math.max(0, idx - 3); j <= Math.min(last, idx + 10); j++) {
         var d = dist(p, target[j]);
         if (d < best) { best = d; bestJ = j; }
       }
@@ -116,7 +116,8 @@
       else idx = Math.max(idx, bestJ);
     });
     if (off / pts.length > OFF_PATH_MAX) return 'off';
-    if (idx / last < COVERAGE_OK) return 'short';
+    // Hasta dónde llegó: en trazos cortos (la rayita de la t) se perdonan unos 4 puntos del final.
+    if (idx < Math.min(last * COVERAGE_OK, last - 4)) return 'short';
     if (strokeLength(pts) > targetLen * MAX_INK_RATIO) return 'scribble';
     return null;
   }
@@ -219,10 +220,10 @@
     this.ctx = canvas.getContext('2d');
     this.letter = letter;
     this.opts = opts || {};
-    this.lower = !!this.opts.lower;
+    this.style = this.opts.style || 'upper'; // 'upper' (ABC), 'lower' (abc) o 'cursive'
     this.free = !!this.opts.free; // modo libre: sin caminito, se revisa al tocar "Listo"
-    this.lines = window.LETTER_LINES[this.lower ? 'lower' : 'upper'];
-    var set = this.lower ? window.LOWER_LETTERS : window.LETTERS;
+    this.lines = window.LETTER_LINES[this.style];
+    var set = window.letterSet(this.style);
     this.strokes = set[letter].map(function (s) { return resample(s, 2); });
     this.others = Object.keys(set).filter(function (k) { return k !== letter; }).map(function (k) {
       return set[k].map(function (s) { return resample(s, 2); });

@@ -25,12 +25,18 @@ window.PHRASES = {
   que_dibujaste: '¿Qué dibujaste?'
 };
 
-// Categorías para la pista. `say` es lo que se dice en voz alta.
+// Categorías para la pista (en este orden se muestran al elegir). `say` es lo que se dice
+// en voz alta y `name` el título del grupo al elegir imagen.
 window.CATEGORIES = {
-  animal: { icon: '🐾', label: 'Es un animal', say: 'Pista: es un animal' },
-  fruta: { icon: '🍎', label: 'Es una fruta', say: 'Pista: es una fruta' },
-  comida: { icon: '🍽️', label: 'Es algo de comer', say: 'Pista: es algo de comer' },
-  transporte: { icon: '🚗', label: 'Es un transporte', say: 'Pista: es un transporte' },
-  naturaleza: { icon: '🌤️', label: 'Está en la naturaleza', say: 'Pista: está en la naturaleza' },
-  cosa: { icon: '🧸', label: 'Es una cosa', say: 'Pista: es una cosa' }
+  animal: { icon: '🐾', label: 'Es un animal', name: 'Animales', say: 'Pista: es un animal' },
+  fruta: { icon: '🍎', label: 'Es una fruta', name: 'Frutas', say: 'Pista: es una fruta' },
+  verdura: { icon: '🥕', label: 'Es una verdura', name: 'Verduras', say: 'Pista: es una verdura' },
+  comida: { icon: '🍽️', label: 'Es algo de comer', name: 'Comida', say: 'Pista: es algo de comer' },
+  ropa: { icon: '👕', label: 'Es ropa', name: 'Ropa', say: 'Pista: es ropa' },
+  cuerpo: { icon: '✋', label: 'Es parte del cuerpo', name: 'Cuerpo', say: 'Pista: es parte del cuerpo' },
+  juguete: { icon: '🧸', label: 'Es un juguete', name: 'Juguetes', say: 'Pista: es un juguete' },
+  instrumento: { icon: '🎵', label: 'Es un instrumento musical', name: 'Instrumentos', say: 'Pista: es un instrumento musical' },
+  casa: { icon: '🏠', label: 'Está en la casa', name: 'Casa', say: 'Pista: está en la casa' },
+  transporte: { icon: '🚗', label: 'Es un transporte', name: 'Transportes', say: 'Pista: es un transporte' },
+  naturaleza: { icon: '🌤️', label: 'Está en la naturaleza', name: 'Naturaleza', say: 'Pista: está en la naturaleza' }
 };
