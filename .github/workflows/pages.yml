@@ -8,12 +8,13 @@ permissions:
   contents: read
   pages: write
   id-token: write
-concurrency:
-  group: pages
-  cancel-in-progress: true
 jobs:
   deploy:
     if: github.ref_name == github.event.repository.default_branch
+    # Va dentro del trabajo para que las ramas que no publican no cancelen la publicación.
+    concurrency:
+      group: pages
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     environment:
       name: github-pages
