@@ -229,3 +229,14 @@ h2 { margin: 0; font-size: clamp(20px, 5.5vw, 28px); text-align: center; }
 .word-input:focus { outline: none; border-color: var(--primary); }
 .question small { font-size: 15px; color: var(--muted); }
 .lower-case .keyboard button, .lower-case .slot.reveal span { text-transform: lowercase; }
+
+/* Pista de categoría */
+.cat-pill {
+  margin: 10px 0 0; padding: 6px 16px; border-radius: 999px;
+  font-size: 19px; font-weight: bold; color: var(--ink);
+  background: #fff3c4; box-shadow: 0 3px 0 #f1dc8a;
+}
+.cat-pill .cat-label { color: var(--muted); font-weight: normal; }
+.cat-chips { margin-bottom: 6px; }
+.cat-chips .chip { font-size: 16px; padding: 6px 12px; }
+#word .label { margin: 12px 0 6px; font-size: 16px; }

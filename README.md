@@ -26,7 +26,14 @@ y, cuando acierta, también las escribe.
   letra solo, como en su pizarra, y toca **Listo**. Si no le sale, el juego le muestra el caminito para
   que la repase. También puede pedir **Ayuda** en cualquier momento.
 
+Al adivinar aparece una **pista** con la categoría (🐾 animal, 🍎 fruta, 🚗 transporte…); al tocarla se escucha.
+
 El juego dice las letras en voz alta ("¿Tu palabra tiene la ge?").
+
+### Voz
+Si el navegador tiene voz en español (Chrome, Safari) se usa esa. Si no (por ejemplo la app de Claude en
+Android), se tocan las grabaciones de `www/js/voice-clips.js`. Al cambiar frases o palabras hay que
+regrabarlas: `pip install espeakng-loader` y `python3 tools/generar-voz.py`.
 
 ## Probarlo en la computadora
 
@@ -57,7 +64,8 @@ npm run android       # o: npm run ios
 
 ## Personalizar
 
-- **Imágenes y palabras:** `www/js/words.js` (palabra en MAYÚSCULAS, sin tildes, y un emoji).
+- **Imágenes y palabras:** `www/js/words.js` (palabra en MAYÚSCULAS, sin tildes, un emoji y su categoría);
+  después regrabar la voz con `python3 tools/generar-voz.py`.
 - **Forma y orden de los trazos de cada letra (mayúsculas y minúsculas):** `www/js/letters.js`.
 - **Número de errores permitidos:** `MAX_ERRORS` en `www/js/figure.js`.
 - **Cómo se revisa la letra:**

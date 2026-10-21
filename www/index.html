@@ -75,6 +75,8 @@
       <img id="word-drawing" class="word-drawing" alt="Tu dibujo">
       <p class="question">¿Qué dibujaste? <br><small>Un adulto puede ayudar a escribir la palabra</small></p>
       <input id="word-input" class="word-input" type="text" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="GATO">
+      <p class="label">¿Qué es? (pista para adivinar)</p>
+      <div id="word-cats" class="chips cat-chips"></div>
       <p id="word-error" class="feedback"></p>
       <div class="row">
         <button id="btn-word-back" class="big-btn secondary">✏️ Dibujar más</button>
@@ -91,6 +93,7 @@
       <span id="lives" class="lives"></span>
     </header>
     <div id="figure" class="figure"></div>
+    <button id="hint-cat" class="cat-pill" hidden></button>
     <div id="slots" class="slots"></div>
     <div id="misses" class="misses" aria-label="Letras que no están"></div>
     <p id="game-hint" class="hint"></p>
@@ -142,6 +145,8 @@
 
   <div id="confetti" class="confetti"></div>
 
+  <script src="js/phrases.js"></script>
+  <script src="js/voice-clips.js"></script>
   <script src="js/letters.js"></script>
   <script src="js/words.js"></script>
   <script src="js/figure.js"></script>

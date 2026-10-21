@@ -36,18 +36,95 @@
     lose: function () { tone([440, 330, 220], 0.2); }
   };
 
-  function say(text) {
-    try {
-      if (!window.speechSynthesis) return;
-      speechSynthesis.cancel();
-      var u = new SpeechSynthesisUtterance(text);
-      u.lang = 'es-ES';
-      var voice = speechSynthesis.getVoices().filter(function (v) { return /^es/i.test(v.lang); })[0];
-      if (voice) u.voice = voice;
-      u.rate = 0.9;
-      speechSynthesis.speak(u);
-    } catch (e) { /* sin voz */ }
+  /*
+   * Voz. say() recibe partes: claves de PHRASES ('escribe'), una letra {l: 'B'},
+   * una palabra {w: 'GATO'} o una pista {cat: 'animal'}.
+   * Si el navegador tiene voz en español se usa esa; si no (por ejemplo la app de
+   * Claude en Android) se tocan las grabaciones de js/voice-clips.js.
+   */
+  var player = new Audio(), clipQueue = [], ttsBroken = false;
+  player.onended = function () { playNextClip(); };
+
+  function partText(p) {
+    if (typeof p === 'string') return window.PHRASES[p];
+    if (p.l) return letterName(p.l);
+    if (p.w) return p.w.toLowerCase();
+    return window.CATEGORIES[p.cat].say;
   }
+  function partClip(p) {
+    var key = typeof p === 'string' ? p : p.l ? 'L_' + p.l : p.w ? 'W_' + p.w : 'cat_' + p.cat;
+    return (window.VOICE_CLIPS || {})[key];
+  }
+  function spanishVoice() {
+    try {
+      if (ttsBroken || !window.speechSynthesis) return null;
+      return speechSynthesis.getVoices().filter(function (v) { return /^es/i.test(v.lang); })[0] || null;
+    } catch (e) { return null; }
+  }
+
+  function say() {
+    var parts = Array.prototype.slice.call(arguments);
+    stopVoice();
+    var voice = spanishVoice();
+    if (voice) speakTTS(parts, voice);
+    else playClips(parts);
+  }
+
+  function stopVoice() {
+    clipQueue = [];
+    try { player.pause(); } catch (e) { /* nada sonando */ }
+    try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) { /* sin voz */ }
+  }
+
+  function speakTTS(parts, voice) {
+    try {
+      var u = new SpeechSynthesisUtterance(parts.map(partText).join(' '));
+      u.lang = voice.lang;
+      u.voice = voice;
+      u.rate = 0.9;
+      var started = false;
+      u.onstart = function () { started = true; };
+      // Si la voz del navegador no arranca, usamos las grabaciones desde ahora.
+      var fallback = function () {
+        if (started) return;
+        started = true;
+        ttsBroken = true;
+        try { speechSynthesis.cancel(); } catch (e) { /* sin voz */ }
+        playClips(parts);
+      };
+      u.onerror = function (e) { if (e.error !== 'interrupted' && e.error !== 'canceled') fallback(); };
+      setTimeout(fallback, 1500);
+      speechSynthesis.speak(u);
+    } catch (e) {
+      ttsBroken = true;
+      playClips(parts);
+    }
+  }
+
+  function playClips(parts) {
+    clipQueue = parts.map(partClip).filter(Boolean);
+    playNextClip();
+  }
+  function playNextClip() {
+    var src = clipQueue.shift();
+    if (!src) return;
+    player.muted = false;
+    player.src = src;
+    var p = player.play();
+    if (p && p.catch) p.catch(function () { /* el navegador no dejó sonar */ });
+  }
+
+  // Algunos teléfonos sólo dejan sonar audio si el primer play() ocurre al tocar la pantalla.
+  document.addEventListener('pointerdown', function unlock() {
+    document.removeEventListener('pointerdown', unlock);
+    if (spanishVoice() || player.src || !window.VOICE_CLIPS) return;
+    var src = window.VOICE_CLIPS.excelente;
+    player.muted = true;
+    player.src = src;
+    var p = player.play();
+    if (p && p.then) p.then(function () { if (player.src === src) { player.pause(); player.muted = false; } }).catch(function () {});
+  });
+
   function letterName(l) { return 'la ' + window.LETTER_NAMES[l]; }
   function isLower() { return settings.case === 'lower'; }
   // Cómo se muestra una letra o palabra según mayúsculas/minúsculas.
@@ -92,7 +169,7 @@
   $('btn-mode-pick').addEventListener('click', function () {
     grid.querySelectorAll('button:not(.draw-own) .name').forEach(function (n, i) { n.textContent = disp(window.WORDS[i].word); });
     show('pick');
-    say('Elige tu imagen secreta');
+    say('elige');
   });
   $('btn-mode-guess').addEventListener('click', function () { startGame(randomWord(), 'guess'); });
 
@@ -122,7 +199,7 @@
   // mode 'pick': el niño eligió la imagen y otro adivina.
   // mode 'guess': el juego eligió la imagen y el niño adivina.
   function startGame(w, mode) {
-    state = { word: w.word, pic: picHTML(w), mode: mode, letters: w.word.split(''), found: {}, used: {}, errors: 0, over: false };
+    state = { word: w.word, pic: picHTML(w), cat: w.cat, mode: mode, letters: w.word.split(''), found: {}, used: {}, errors: 0, over: false };
     show('game');
 
     var peek = $('btn-peek');
@@ -145,8 +222,18 @@
       kb.appendChild(b);
     });
     renderFigure(false);
-    say(mode === 'pick' ? 'Que empiece el juego' : 'Adivina la palabra');
+    // Pista: qué tipo de cosa es (animal, fruta…), para el que adivina.
+    var cat = window.CATEGORIES[w.cat], pill = $('hint-cat');
+    pill.hidden = !cat;
+    if (cat) pill.innerHTML = '<span class="cat-label">Pista:</span> ' + cat.icon + ' ' + cat.label;
+    var intro = mode === 'pick' ? 'empieza_juego' : 'adivina';
+    if (cat) say(intro, { cat: w.cat });
+    else say(intro);
   }
+
+  $('hint-cat').addEventListener('click', function () {
+    if (state && state.cat) say({ cat: state.cat });
+  });
 
   function renderFigure(fallen) {
     $('figure').innerHTML = window.figureSVG(state.errors, settings.gender, fallen);
@@ -179,7 +266,7 @@
     $('ask-feedback').textContent = '';
     $('btn-yes').disabled = $('btn-no').disabled = false;
     openOverlay('ask');
-    say('¿Tu palabra tiene ' + letterName(l) + '?');
+    say('tiene', { l: l });
 
     var answer = function (saysYes) {
       $('btn-yes').disabled = $('btn-no').disabled = true;
@@ -193,7 +280,7 @@
         // Corrección suave: le ayudamos a revisar su palabra.
         fb.style.color = 'var(--primary)';
         fb.textContent = really ? '¡Mira bien! 👀 Sí está en tu palabra' : 'Mmm… 🤔 Tu palabra no tiene la ' + disp(l);
-        say(really ? 'Mira bien, sí está' : 'Mmm, esa no está');
+        say(really ? 'mira_si' : 'mira_no');
         setTimeout(function () { closeOverlay('ask'); resolveLetter(l); }, 2400);
       }
     };
@@ -230,13 +317,14 @@
     openOverlay('trace');
     $('trace-model').textContent = disp(l);
     var name = 'la ' + disp(l);
-    var intro = found ? '' : 'No está, pero igual escríbela. ';
+    var intro = found ? '' : window.PHRASES.no_esta + ' ';
+    var spoken = (found ? [] : ['no_esta']).concat(['escribe', { l: l }]);
     if (free) {
       setTraceMsg(intro + 'Escribe ' + name + ' y toca Listo ✅');
-      say(intro + 'Escribe ' + letterName(l));
+      say.apply(null, spoken);
     } else {
       setTraceMsg(intro + 'Escribe ' + name + '. Empieza en el punto verde 🟢');
-      say(intro + 'Escribe ' + letterName(l) + '. Empieza en el punto verde');
+      say.apply(null, spoken.concat(['punto_verde']));
     }
 
     var canvas = $('trace-canvas');
@@ -256,13 +344,13 @@
             short: '¡Casi! Llega hasta la flecha ➡️ Inténtalo otra vez',
             scribble: '¡Sin garabatos! Hazlo una sola vez, despacito 🐢'
           }[why] || '¡Casi! Sigue el dedito 👆 y vuelve a intentarlo');
-          say('Casi. Inténtalo otra vez');
+          say('casi');
           shakeCanvas();
         },
         onDone: function (img) {
           sfx.win();
           setTraceMsg('¡Excelente! 🌟');
-          say('¡Excelente!');
+          say('excelente');
           setTimeout(function () {
             closeTracer();
             if (found) placeLetter(l, img);
@@ -293,7 +381,7 @@
     tracer.showGuide();
     updateTraceButtons();
     setTraceMsg(msg);
-    say('Te ayudo. Empieza en el punto verde');
+    say('te_ayudo');
   }
 
   $('btn-trace-done').addEventListener('click', function () {
@@ -326,7 +414,7 @@
     setTraceMsg(tracer.free ? 'Escribe la letra y toca Listo ✅' : 'Empieza en el punto verde 🟢');
   });
   $('btn-trace-say').addEventListener('click', function () {
-    if (tracer) say('Escribe ' + letterName(tracer.letter));
+    if (tracer) say('escribe', { l: tracer.letter });
   });
 
   function placeLetter(l, img) {
@@ -347,7 +435,7 @@
     var pick = state.mode === 'pick';
     showEnd(state.pic, pick ? '¡Adivinaron tu palabra! 🎉' : '¡Ganaste! 🎉',
       pick ? '¡Y tú escribiste todas las letras!' : '¡Lo hiciste muy bien!');
-    say(pick ? 'Adivinaron tu palabra: ' + state.word.toLowerCase() : 'Ganaste. La palabra es ' + state.word.toLowerCase());
+    say(pick ? 'adivinaron' : 'ganaste_es', { w: state.word });
   }
 
   function lose() {
@@ -366,7 +454,7 @@
       if (pick) confetti();
       showEnd(pick ? '🏆' : '💦', pick ? '¡Ganaste tú! 🏆' : '¡Se cayó al agua! 💦',
         pick ? 'No adivinaron tu palabra secreta:' : 'La palabra era:');
-      say(pick ? 'Ganaste. No adivinaron tu palabra' : 'Se cayó al agua. La palabra era ' + state.word.toLowerCase());
+      if (pick) say('ganaste_no'); else say('cayo', { w: state.word });
     }, 1800);
   }
 
@@ -403,7 +491,7 @@
   function openDraw() {
     draw.lines = [];
     show('draw');
-    say('Dibuja tu imagen secreta');
+    say('dibuja');
     requestAnimationFrame(sizeDraw);
   }
 
@@ -460,13 +548,15 @@
   });
 
   $('btn-draw-next').addEventListener('click', function () {
-    if (!draw.lines.length) { say('Primero dibuja algo'); return; }
+    if (!draw.lines.length) { say('primero_dibuja'); return; }
     draw.image = exportDrawing();
     $('word-drawing').src = draw.image;
     $('word-input').value = '';
+    draw.cat = null;
+    $('word-cats').querySelectorAll('.chip').forEach(function (x) { x.classList.remove('selected'); });
     $('word-error').textContent = '';
     openOverlay('word');
-    say('¿Qué dibujaste?');
+    say('que_dibujaste');
     setTimeout(function () { $('word-input').focus(); }, 100);
   });
 
@@ -494,6 +584,21 @@
     return out.toDataURL('image/png');
   }
 
+  // Categorías para el dibujo propio (opcional).
+  Object.keys(window.CATEGORIES).forEach(function (k) {
+    var c = window.CATEGORIES[k], b = document.createElement('button');
+    b.className = 'chip';
+    b.setAttribute('data-cat', k);
+    b.textContent = c.icon + ' ' + c.label.replace(/^Es (un |una )?|^Está en la /, '');
+    b.addEventListener('click', function () {
+      draw.cat = draw.cat === k ? null : k;
+      $('word-cats').querySelectorAll('.chip').forEach(function (x) {
+        x.classList.toggle('selected', x.getAttribute('data-cat') === draw.cat);
+      });
+    });
+    $('word-cats').appendChild(b);
+  });
+
   $('btn-word-back').addEventListener('click', function () { closeOverlay('word'); });
 
   // Mayúsculas, sin tildes ni espacios (la Ñ se respeta).
@@ -510,7 +615,7 @@
       return;
     }
     $('word-input').blur();
-    startGame({ word: word, image: draw.image }, 'pick');
+    startGame({ word: word, image: draw.image, cat: draw.cat }, 'pick');
   }
   $('btn-word-ok').addEventListener('click', acceptWord);
   $('word-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') acceptWord(); });
