@@ -9,6 +9,7 @@ on:
       - 'assets/**'
       - 'capacitor.config.json'
       - 'package.json'
+      - 'tools/android/**'
       - '.github/workflows/android.yml'
   workflow_dispatch:
 permissions:
