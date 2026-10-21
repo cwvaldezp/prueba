@@ -60,4 +60,10 @@ npm run android       # o: npm run ios
 - **Imágenes y palabras:** `www/js/words.js` (palabra en MAYÚSCULAS, sin tildes, y un emoji).
 - **Forma y orden de los trazos de cada letra (mayúsculas y minúsculas):** `www/js/letters.js`.
 - **Número de errores permitidos:** `MAX_ERRORS` en `www/js/figure.js`.
-- **Qué tan exigente es al escribir:** `TOLERANCE` y `COVERAGE_OK` (y `FREE_TOLERANCE` / `FREE_COVERAGE_OK` para el modo libre) en `www/js/tracer.js`.
+- **Cómo se revisa la letra:**
+  - *Con caminito*: cada trazo debe empezar en el punto verde, avanzar hacia la flecha sin ir y venir, llegar
+    hasta el final y sin tinta de más (garabatos). Si no, se pone rojo y se borra.
+  - *Libre*: la letra se ajusta a tamaño y posición y se compara su forma; tiene que estar cada trazo, sin
+    tinta de más, y no puede parecerse más a otra letra (así una b no pasa por d ni una o por a).
+  - Prueba automática con escritura simulada y garabatos: `node tests/revision-letras.js`.
+- **Qué tan exigente es al escribir:** las constantes al inicio de `www/js/tracer.js`.

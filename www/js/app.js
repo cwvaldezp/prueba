@@ -251,9 +251,11 @@
           setTraceMsg('¡Bien! Ahora el trazo ' + (n + 1) + ' de ' + total + ' 🟢');
         },
         onRetry: function (why) {
-          setTraceMsg(why === 'short'
-            ? '¡Casi! Llega hasta la flecha ➡️ Inténtalo otra vez'
-            : '¡Casi! Sigue el dedito 👆 y vuelve a intentarlo');
+          setTraceMsg({
+            start: 'Empieza en el punto verde 🟢 Inténtalo otra vez',
+            short: '¡Casi! Llega hasta la flecha ➡️ Inténtalo otra vez',
+            scribble: '¡Sin garabatos! Hazlo una sola vez, despacito 🐢'
+          }[why] || '¡Casi! Sigue el dedito 👆 y vuelve a intentarlo');
           say('Casi. Inténtalo otra vez');
           shakeCanvas();
         },
@@ -302,7 +304,9 @@
     }
     if (!tracer.checkFree()) {
       shakeCanvas();
-      showTraceGuide('¡Casi! Ahora con el caminito: empieza en el punto verde 🟢');
+      showTraceGuide(tracer.lastProblem === 'scribble'
+        ? '¡Eso parece un garabato! 🙂 Vamos con el caminito: empieza en el punto verde 🟢'
+        : '¡Casi! Ahora con el caminito: empieza en el punto verde 🟢');
     }
   });
   $('btn-trace-help').addEventListener('click', function () {

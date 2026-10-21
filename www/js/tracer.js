@@ -7,11 +7,18 @@
  * Todo se guarda en coordenadas de la letra (0..100) y se dibuja escalado.
  */
 (function () {
-  var TOLERANCE = 10;      // qué tan lejos del camino se acepta el dedo (unidades de letra)
-  var COVERAGE_OK = 0.8;   // porcentaje del trazo que hay que cubrir
-  var PRECISION_MIN = 0.55; // porcentaje mínimo de la tinta que debe estar sobre el camino
-  var FREE_TOLERANCE = 13;  // en modo libre se acepta una letra un poco más "suelta"
-  var FREE_COVERAGE_OK = 0.7;
+  /* Qué tan exigente es la revisión (distancias en unidades de letra, la letra mide 100). */
+  var TOLERANCE = 10;        // qué tan lejos del camino se acepta el dedo
+  var START_TOLERANCE = 14;  // qué tan lejos del punto verde se puede empezar
+  var COVERAGE_OK = 0.85;    // hasta dónde hay que llegar (85% del trazo)
+  var OFF_PATH_MAX = 0.15;   // tinta fuera del camino permitida
+  var MAX_INK_RATIO = 1.6;   // tinta máxima comparada con el largo del trazo (evita garabatos)
+  var FREE_TOLERANCE = 10;   // modo libre: después de ajustar tamaño y posición
+  var FREE_PRECISION = 0.85; // modo libre: tinta que debe caer sobre la forma de la letra
+  var FREE_COVERAGE_OK = 0.85;     // modo libre: cuánto de la letra hay que dibujar
+  var FREE_STROKE_COVERAGE = 0.7;  // modo libre: cuánto de cada trazo (no puede faltar ninguno)
+  var FREE_INK_RANGE = [0.6, 1.5]; // modo libre: tinta mínima y máxima comparada con la letra
+  var OTHER_MARGIN = 0.9;          // modo libre: otra letra tiene que ajustar 10% mejor para rechazar
   var COLORS = ['#e74c3c', '#3498db', '#27ae60', '#9b59b6'];
 
   function dist(a, b) {
@@ -65,6 +72,148 @@
     return pts[pts.length - 1];
   }
 
+  function joinLines(lines) {
+    var out = [];
+    lines.forEach(function (line) { out = out.concat(resample(line, 2)); });
+    return out;
+  }
+
+  function bbox(pts) {
+    var b = [Infinity, Infinity, -Infinity, -Infinity];
+    pts.forEach(function (p) {
+      b[0] = Math.min(b[0], p[0]); b[1] = Math.min(b[1], p[1]);
+      b[2] = Math.max(b[2], p[0]); b[3] = Math.max(b[3], p[1]);
+    });
+    return b;
+  }
+
+  /*
+   * Revisa un trazo con caminito. El niño debe empezar en el punto verde e ir
+   * avanzando por el camino hasta la flecha, sin regresar ni hacer garabatos.
+   * Devuelve null si está bien o el motivo: 'start', 'off', 'short' o 'scribble'.
+   */
+  function gradeStroke(inkLines, target) {
+    var pts = joinLines(inkLines);
+    if (!pts.length) return 'short';
+    var targetLen = strokeLength(target);
+
+    // Puntos (de la i y la j): un toque o rayita corta encima del punto.
+    if (targetLen < 1) {
+      var near = pts.every(function (p) { return dist(p, target[0]) < TOLERANCE; });
+      return !near ? 'off' : strokeLength(pts) > 12 ? 'scribble' : null;
+    }
+    if (dist(pts[0], target[0]) > START_TOLERANCE) return 'start';
+
+    // Recorremos el camino sólo hacia adelante: ir y venir deja tinta "fuera".
+    var idx = 0, off = 0, last = target.length - 1;
+    pts.forEach(function (p) {
+      var best = Infinity, bestJ = idx;
+      for (var j = Math.max(0, idx - 2); j <= Math.min(last, idx + 6); j++) {
+        var d = dist(p, target[j]);
+        if (d < best) { best = d; bestJ = j; }
+      }
+      if (best > TOLERANCE) off++;
+      else idx = Math.max(idx, bestJ);
+    });
+    if (off / pts.length > OFF_PATH_MAX) return 'off';
+    if (idx / last < COVERAGE_OK) return 'short';
+    if (strokeLength(pts) > targetLen * MAX_INK_RATIO) return 'scribble';
+    return null;
+  }
+
+  /*
+   * Revisa una letra escrita libremente. Primero se ajusta al tamaño y posición
+   * de la letra modelo (puede escribirla más chica o corrida) y luego se compara
+   * la forma: tiene que estar cada trazo, casi toda la tinta debe caer sobre la
+   * letra y no puede haber tinta de más. Así una b no pasa por d, ni un garabato
+   * por letra. Además se compara con las demás letras (`others`): si lo escrito
+   * se parece más a otra, no cuenta (una o no pasa por a).
+   * Devuelve null si está bien o el motivo: 'empty', 'shape', 'scribble' u 'other'.
+   */
+  function gradeLetter(inkLines, strokes, others) {
+    var mine = fitLetter(inkLines, strokes);
+    if (mine.problem) return mine.problem;
+    // ¿Dibujó algún puntito? Si no, no puede ser una i ni una j.
+    var hasDot = inkLines.some(function (l) { return strokeLength(l) < 12; });
+    var lookalike = (others || []).some(function (o) {
+      var needsDot = o.some(function (st) { return strokeLength(st) < 1; });
+      if (needsDot && !hasDot) return false;
+      var f = fitLetter(inkLines, o);
+      return !f.problem && f.score < mine.score * OTHER_MARGIN;
+    });
+    return lookalike ? 'other' : null;
+  }
+
+  // Ajusta lo escrito a una letra y la compara. Devuelve { problem, score }: score más bajo = más parecida.
+  // Deja sólo puntos separados al menos `step` unidades (comparar menos puntos es mucho más rápido).
+  function thin(pts, step) {
+    var out = [pts[0]];
+    for (var i = 1; i < pts.length; i++) if (dist(pts[i], out[out.length - 1]) >= step) out.push(pts[i]);
+    return out;
+  }
+
+  // Distancia de un punto al punto más cercano de una lista.
+  function nearest(p, pts) {
+    var best = Infinity;
+    for (var i = 0; i < pts.length; i++) {
+      var dx = p[0] - pts[i][0], dy = p[1] - pts[i][1], d = dx * dx + dy * dy;
+      if (d < best) best = d;
+    }
+    return Math.sqrt(best);
+  }
+
+  // Ajusta lo escrito a una letra y la compara. Devuelve { problem, score }: score más bajo = más parecida.
+  function fitLetter(inkLines, strokes) {
+    var pts = joinLines(inkLines);
+    if (pts.length < 2) return { problem: 'empty' };
+    if (inkLines.length > strokes.length + 2) return { problem: 'scribble' };
+
+    var all = [];
+    strokes.forEach(function (st) { all = all.concat(st); });
+    var ib = bbox(pts), tb = bbox(all);
+    var iw = ib[2] - ib[0], ih = ib[3] - ib[1], tw = tb[2] - tb[0], th = tb[3] - tb[1];
+    if (Math.max(iw, ih) < 12) return { problem: 'shape' }; // demasiado chiquita: un puntito o rayita
+
+    // Escala: en letras muy angostas (l, i) o muy bajitas sólo cuenta una medida.
+    var sx = tw / Math.max(iw, 1), sy = th / Math.max(ih, 1);
+    if (tw < 15 || iw < 15) sx = sy;
+    if (th < 15 || ih < 15) sy = sx;
+    if (sx / sy > 1.8 || sy / sx > 1.8) return { problem: 'shape' }; // muy ancha o muy alta para ser esta letra
+    var cx = (ib[0] + ib[2]) / 2, cy = (ib[1] + ib[3]) / 2, tcx = (tb[0] + tb[2]) / 2, tcy = (tb[1] + tb[3]) / 2;
+    var fit = function (p) { return [tcx + (p[0] - cx) * sx, tcy + (p[1] - cy) * sy]; };
+    var lines = inkLines.map(function (line) { return line.map(fit); });
+    var ink = thin(pts.map(fit), 3);
+    var shape = thin(all, 3);
+
+    var inkDist = ink.map(function (p) { return nearest(p, shape); });
+    var onShape = inkDist.filter(function (d) { return d < FREE_TOLERANCE; }).length / ink.length;
+    var coveredTotal = 0, shapeTotal = 0, missing = false, shapeDistSum = 0;
+    strokes.forEach(function (st) {
+      var sp = thin(st, 3), c = 0;
+      sp.forEach(function (p) {
+        var d = nearest(p, ink);
+        shapeDistSum += d;
+        if (d < FREE_TOLERANCE) c++;
+      });
+      coveredTotal += c;
+      shapeTotal += sp.length;
+      if (c / sp.length < FREE_STROKE_COVERAGE) missing = true;
+    });
+    var totalLen = strokes.reduce(function (a, st) { return a + Math.max(strokeLength(st), 4); }, 0);
+    var inkRatio = lines.reduce(function (a, line) { return a + strokeLength(line); }, 0) / totalLen;
+
+    if (inkRatio > FREE_INK_RANGE[1]) return { problem: 'scribble' };
+    if (onShape < FREE_PRECISION || missing || coveredTotal / shapeTotal < FREE_COVERAGE_OK || inkRatio < FREE_INK_RANGE[0]) return { problem: 'shape' };
+
+    // Distancia promedio en los dos sentidos (tinta → letra y letra → tinta), más un castigo por deformarla.
+    var inkAvg = inkDist.reduce(function (a, d) { return a + d; }, 0) / ink.length;
+    // Castigos: deformarla, agrandarla/achicarla y moverla de su lugar en los renglones.
+    var stretch = Math.abs(Math.log(sx / sy));
+    var resize = Math.abs(Math.log(Math.sqrt(sx * sy)));
+    var shift = Math.sqrt((tcx - cx) * (tcx - cx) + (tcy - cy) * (tcy - cy));
+    return { problem: null, score: inkAvg + shapeDistSum / shapeTotal + 4 * stretch + 3 * resize + 0.05 * shift };
+  }
+
   function Tracer(canvas, letter, opts) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
@@ -75,6 +224,9 @@
     this.lines = window.LETTER_LINES[this.lower ? 'lower' : 'upper'];
     var set = this.lower ? window.LOWER_LETTERS : window.LETTERS;
     this.strokes = set[letter].map(function (s) { return resample(s, 2); });
+    this.others = Object.keys(set).filter(function (k) { return k !== letter; }).map(function (k) {
+      return set[k].map(function (s) { return resample(s, 2); });
+    });
     this.current = 0;
     this.accepted = [];   // tinta aceptada: lista de líneas
     this.pending = [];    // tinta del trazo actual (puede tener varias líneas si levanta el dedo)
@@ -276,20 +428,9 @@
 
   // Modo libre: revisa la letra completa. Devuelve true si está bien.
   Tracer.prototype.checkFree = function () {
-    var ink = this.pending;
-    if (!ink.length) return false;
-    var targets = [], inkPts = [];
-    this.strokes.forEach(function (st) { targets = targets.concat(st); });
-    ink.forEach(function (line) { inkPts = inkPts.concat(resample(line, 2)); });
-
-    var covered = targets.filter(function (p) {
-      return ink.some(function (line) { return distToPolyline(p, line) < FREE_TOLERANCE; });
-    }).length / targets.length;
-    var precise = inkPts.filter(function (p) {
-      return this.strokes.some(function (st) { return distToPolyline(p, st) < FREE_TOLERANCE * 1.5; });
-    }, this).length / inkPts.length;
-
-    if (covered >= FREE_COVERAGE_OK && precise >= PRECISION_MIN) {
+    if (!this.pending.length) return false;
+    this.lastProblem = gradeLetter(this.pending, this.strokes, this.others);
+    if (!this.lastProblem) {
       this.accepted = this.pending;
       this.pending = [];
       this.finished = true;
@@ -309,20 +450,11 @@
   };
 
   Tracer.prototype.check = function () {
-    var target = this.strokes[this.current];
-    var ink = this.pending;
-    var inkPts = [];
-    ink.forEach(function (line) { inkPts = inkPts.concat(resample(line, 2)); });
-
-    var covered = target.filter(function (p) {
-      return ink.some(function (line) { return distToPolyline(p, line) < TOLERANCE; });
-    }).length / target.length;
-    var precise = inkPts.filter(function (p) { return distToPolyline(p, target) < TOLERANCE * 1.5; }).length / inkPts.length;
-
-    // Si se salió del camino o no llegó hasta la flecha, se borra para intentarlo de nuevo.
-    if (precise < PRECISION_MIN || covered < COVERAGE_OK) {
+    // Si no salió bien, se borra para intentarlo de nuevo.
+    var problem = gradeStroke(this.pending, this.strokes[this.current]);
+    if (problem) {
       this.erase();
-      if (this.opts.onRetry) this.opts.onRetry(precise < PRECISION_MIN ? 'off' : 'short');
+      if (this.opts.onRetry) this.opts.onRetry(problem);
       return;
     }
     {
@@ -391,4 +523,5 @@
   };
 
   window.Tracer = Tracer;
+  window.LetterGrader = { gradeStroke: gradeStroke, gradeLetter: gradeLetter, resample: resample };
 })();
