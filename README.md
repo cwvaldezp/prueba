@@ -14,8 +14,17 @@ El juego del ahorcado para niños que están aprendiendo a escribir. Funciona en
    Cuando la termina, **su propia letra se coloca sobre las rayitas** correspondientes.
 5. Si no está, se va dibujando el chico o la chica en el trampolín. Con 6 errores… ¡se cae a la piscina! 💦
 
+**✏️ Dibujar mi imagen**: en la lista de imágenes, la primera opción permite que el niño **dibuje** su
+imagen secreta con colores. Después un adulto escribe qué es (por ejemplo "piña") y salen las rayitas.
+
 **🙈 Yo adivino** (turno del adulto de esconder): el juego elige una imagen al azar, el niño dice letras
 y, cuando acierta, también las escribe.
+
+### Opciones en la pantalla de inicio
+- **ABC / abc:** escribir en mayúsculas o en minúsculas (cada una con sus renglones y su forma de trazarse).
+- **👆 Con caminito / ✏️ Libre:** con caminito, el niño repasa cada trazo guiado. En modo libre escribe la
+  letra solo, como en su pizarra, y toca **Listo**. Si no le sale, el juego le muestra el caminito para
+  que la repase. También puede pedir **Ayuda** en cualquier momento.
 
 El juego dice las letras en voz alta ("¿Tu palabra tiene la ge?").
 
@@ -49,6 +58,6 @@ npm run android       # o: npm run ios
 ## Personalizar
 
 - **Imágenes y palabras:** `www/js/words.js` (palabra en MAYÚSCULAS, sin tildes, y un emoji).
-- **Forma y orden de los trazos de cada letra:** `www/js/letters.js`.
+- **Forma y orden de los trazos de cada letra (mayúsculas y minúsculas):** `www/js/letters.js`.
 - **Número de errores permitidos:** `MAX_ERRORS` en `www/js/figure.js`.
-- **Qué tan exigente es al escribir:** `TOLERANCE` y `COVERAGE_OK` en `www/js/tracer.js`.
+- **Qué tan exigente es al escribir:** `TOLERANCE` y `COVERAGE_OK` (y `FREE_TOLERANCE` / `FREE_COVERAGE_OK` para el modo libre) en `www/js/tracer.js`.

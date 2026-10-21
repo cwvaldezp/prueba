@@ -1,8 +1,11 @@
 (function () {
   var $ = function (id) { return document.getElementById(id); };
 
-  var settings = { gender: 'chico' };
-  try { settings.gender = localStorage.getItem('gender') || 'chico'; } catch (e) { /* sin almacenamiento */ }
+  // gender: chico/chica · case: upper/lower (mayúsculas o minúsculas) · write: guided/free
+  var settings = { gender: 'chico', case: 'upper', write: 'guided' };
+  Object.keys(settings).forEach(function (k) {
+    try { settings[k] = localStorage.getItem(k) || settings[k]; } catch (e) { /* sin almacenamiento */ }
+  });
 
   var state = null;     // partida actual
   var tracer = null;    // pizarra activa
@@ -46,6 +49,12 @@
     } catch (e) { /* sin voz */ }
   }
   function letterName(l) { return 'la ' + window.LETTER_NAMES[l]; }
+  function isLower() { return settings.case === 'lower'; }
+  // Cómo se muestra una letra o palabra según mayúsculas/minúsculas.
+  function disp(text) { return isLower() ? text.toLowerCase() : text; }
+  function escapeHTML(t) { return String(t).replace(/[&<>"]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+  // La imagen secreta: un emoji o un dibujo hecho por el niño.
+  function picHTML(w) { return w.image ? '<img alt="Dibujo" src="' + w.image + '">' : escapeHTML(w.emoji); }
 
   /* ---------- Navegación ---------- */
   function show(id) {
@@ -67,25 +76,36 @@
   function renderHome() {
     $('home-figure').innerHTML = window.figureSVG(window.MAX_ERRORS, settings.gender, false);
     document.querySelectorAll('.chip').forEach(function (c) {
-      c.classList.toggle('selected', c.getAttribute('data-gender') === settings.gender);
+      c.classList.toggle('selected', settings[c.getAttribute('data-setting')] === c.getAttribute('data-value'));
     });
+    document.body.classList.toggle('lower-case', isLower());
   }
   document.querySelectorAll('.chip').forEach(function (c) {
     c.addEventListener('click', function () {
-      settings.gender = c.getAttribute('data-gender');
-      try { localStorage.setItem('gender', settings.gender); } catch (e) { /* sin almacenamiento */ }
+      var key = c.getAttribute('data-setting');
+      settings[key] = c.getAttribute('data-value');
+      try { localStorage.setItem(key, settings[key]); } catch (e) { /* sin almacenamiento */ }
       renderHome();
     });
   });
 
-  $('btn-mode-pick').addEventListener('click', function () { show('pick'); say('Elige tu imagen secreta'); });
+  $('btn-mode-pick').addEventListener('click', function () {
+    grid.querySelectorAll('button:not(.draw-own) .name').forEach(function (n, i) { n.textContent = disp(window.WORDS[i].word); });
+    show('pick');
+    say('Elige tu imagen secreta');
+  });
   $('btn-mode-guess').addEventListener('click', function () { startGame(randomWord(), 'guess'); });
 
   /* ---------- Elegir imagen ---------- */
   var grid = $('pick-grid');
+  var own = document.createElement('button');
+  own.className = 'draw-own';
+  own.innerHTML = '<span class="emoji">✏️</span><span class="name">DIBUJAR</span>';
+  own.addEventListener('click', openDraw);
+  grid.appendChild(own);
   window.WORDS.forEach(function (w) {
     var b = document.createElement('button');
-    b.innerHTML = '<span class="emoji">' + w.emoji + '</span><span class="name">' + w.word + '</span>';
+    b.innerHTML = '<span class="emoji">' + w.emoji + '</span><span class="name">' + disp(w.word) + '</span>';
     b.addEventListener('click', function () { startGame(w, 'pick'); });
     grid.appendChild(b);
   });
@@ -102,11 +122,11 @@
   // mode 'pick': el niño eligió la imagen y otro adivina.
   // mode 'guess': el juego eligió la imagen y el niño adivina.
   function startGame(w, mode) {
-    state = { word: w.word, emoji: w.emoji, mode: mode, letters: w.word.split(''), found: {}, used: {}, errors: 0, over: false };
+    state = { word: w.word, pic: picHTML(w), mode: mode, letters: w.word.split(''), found: {}, used: {}, errors: 0, over: false };
     show('game');
 
     var peek = $('btn-peek');
-    $('peek-emoji').textContent = w.emoji;
+    $('peek-emoji').innerHTML = state.pic;
     peek.classList.toggle('hidden', mode !== 'pick');
     $('game-hint').textContent = mode === 'pick'
       ? 'El otro jugador dice una letra y tú la tocas 👇'
@@ -152,9 +172,9 @@
 
   /* El niño decide si la letra está en su palabra. */
   function askChild(l) {
-    $('ask-emoji').textContent = state.emoji;
-    $('ask-letter').textContent = l;
-    $('ask-question').textContent = '¿Tu palabra tiene ' + letterName(l).toUpperCase() + '?';
+    $('ask-emoji').innerHTML = state.pic;
+    $('ask-letter').textContent = disp(l);
+    $('ask-question').textContent = '¿Tu palabra tiene la letra ' + disp(l) + '?';
     $('ask-feedback').textContent = '';
     $('btn-yes').disabled = $('btn-no').disabled = false;
     openOverlay('ask');
@@ -171,7 +191,7 @@
       } else {
         // Corrección suave: le ayudamos a revisar su palabra.
         fb.style.color = 'var(--primary)';
-        fb.textContent = really ? '¡Mira bien! 👀 Sí está en ' + state.emoji : 'Mmm… 🤔 ' + state.emoji + ' no tiene la ' + l;
+        fb.textContent = really ? '¡Mira bien! 👀 Sí está en tu palabra' : 'Mmm… 🤔 Tu palabra no tiene la ' + disp(l);
         say(really ? 'Mira bien, sí está' : 'Mmm, esa no está');
         setTimeout(function () { closeOverlay('ask'); resolveLetter(l); }, 2400);
       }
@@ -201,16 +221,25 @@
 
   /* ---------- Escribir la letra ---------- */
   function openTracer(l) {
+    var free = settings.write === 'free';
     openOverlay('trace');
-    $('trace-model').textContent = l;
-    setTraceMsg('Escribe ' + letterName(l).toUpperCase() + '. Empieza en el punto verde 🟢');
-    say('Escribe ' + letterName(l) + '. Empieza en el punto verde');
+    $('trace-model').textContent = disp(l);
+    var name = 'la ' + disp(l);
+    if (free) {
+      setTraceMsg('Escribe ' + name + ' y toca Listo ✅');
+      say('Escribe ' + letterName(l));
+    } else {
+      setTraceMsg('Escribe ' + name + '. Empieza en el punto verde 🟢');
+      say('Escribe ' + letterName(l) + '. Empieza en el punto verde');
+    }
 
     var canvas = $('trace-canvas');
-    var total = window.LETTERS[l].length;
+    var total = (isLower() ? window.LOWER_LETTERS : window.LETTERS)[l].length;
     // Esperamos a que la ventana tenga tamaño antes de crear la pizarra.
     requestAnimationFrame(function () {
       tracer = new window.Tracer(canvas, l, {
+        lower: isLower(),
+        free: free,
         onStroke: function (n) {
           sfx.stroke();
           setTraceMsg('¡Bien! Ahora el trazo ' + (n + 1) + ' de ' + total + ' 🟢');
@@ -218,9 +247,7 @@
         onKeepGoing: function () { setTraceMsg('¡Sigue el caminito hasta la flecha! ➡️'); },
         onRetry: function () {
           setTraceMsg('¡Casi! Sigue el dedito 👆 y vuelve a intentarlo');
-          canvas.classList.remove('shake');
-          void canvas.offsetWidth;
-          canvas.classList.add('shake');
+          shakeCanvas();
         },
         onDone: function (img) {
           sfx.win();
@@ -232,8 +259,46 @@
           }, 1100);
         }
       });
+      updateTraceButtons();
     });
+    updateTraceButtons(free);
   }
+
+  // En modo libre se ven "Ayuda" y "Listo"; con caminito no hacen falta.
+  function updateTraceButtons(free) {
+    if (free === undefined) free = !!(tracer && tracer.free);
+    $('btn-trace-help').hidden = !free;
+    $('btn-trace-done').hidden = !free;
+  }
+
+  function shakeCanvas() {
+    var canvas = $('trace-canvas');
+    canvas.classList.remove('shake');
+    void canvas.offsetWidth;
+    canvas.classList.add('shake');
+  }
+
+  function showTraceGuide(msg) {
+    tracer.showGuide();
+    updateTraceButtons();
+    setTraceMsg(msg);
+    say('Te ayudo. Empieza en el punto verde');
+  }
+
+  $('btn-trace-done').addEventListener('click', function () {
+    if (!tracer || !tracer.free || tracer.finished) return;
+    if (!tracer.pending.length) {
+      setTraceMsg('Primero escribe la letra con tu dedo ✏️');
+      return;
+    }
+    if (!tracer.checkFree()) {
+      shakeCanvas();
+      showTraceGuide('¡Casi! Ahora con el caminito: empieza en el punto verde 🟢');
+    }
+  });
+  $('btn-trace-help').addEventListener('click', function () {
+    if (tracer && tracer.free) showTraceGuide('Sigue el dedito 👆 Empieza en el punto verde 🟢');
+  });
 
   function setTraceMsg(t) { $('trace-msg').textContent = t; }
 
@@ -245,7 +310,7 @@
   $('btn-trace-reset').addEventListener('click', function () {
     if (!tracer) return;
     tracer.reset();
-    setTraceMsg('Empieza en el punto verde 🟢');
+    setTraceMsg(tracer.free ? 'Escribe la letra y toca Listo ✅' : 'Empieza en el punto verde 🟢');
   });
   $('btn-trace-say').addEventListener('click', function () {
     if (tracer) say('Escribe ' + letterName(tracer.letter));
@@ -256,7 +321,7 @@
       if (c !== l) return;
       state.found[i] = true;
       var slot = document.querySelector('.slot[data-i="' + i + '"]');
-      slot.innerHTML = '<img alt="' + l + '" src="' + img + '">';
+      slot.innerHTML = '<img alt="' + disp(l) + '" src="' + img + '">';
     });
     if (Object.keys(state.found).length === state.letters.length) win();
   }
@@ -267,7 +332,7 @@
     sfx.win();
     confetti();
     var pick = state.mode === 'pick';
-    showEnd(state.emoji, pick ? '¡Adivinaron tu palabra! 🎉' : '¡Ganaste! 🎉',
+    showEnd(state.pic, pick ? '¡Adivinaron tu palabra! 🎉' : '¡Ganaste! 🎉',
       pick ? '¡Y tú escribiste todas las letras!' : '¡Lo hiciste muy bien!');
     say(pick ? 'Adivinaron tu palabra: ' + state.word.toLowerCase() : 'Ganaste. La palabra es ' + state.word.toLowerCase());
   }
@@ -292,11 +357,11 @@
     }, 1800);
   }
 
-  function showEnd(emoji, title, text) {
-    $('end-emoji').textContent = emoji;
+  function showEnd(pic, title, text) {
+    $('end-emoji').innerHTML = pic;
     $('end-title').textContent = title;
     $('end-text').textContent = text;
-    $('end-word').textContent = state.emoji + ' ' + state.word;
+    $('end-word').innerHTML = state.pic + ' ' + escapeHTML(disp(state.word));
     openOverlay('end');
   }
 
@@ -304,6 +369,138 @@
     if (state && state.mode === 'guess') startGame(randomWord(), 'guess');
     else show('pick');
   });
+
+  /* ---------- Dibujar la imagen secreta ---------- */
+  var COLORS = ['#2d2a4a', '#e74c3c', '#ff9f43', '#f1c40f', '#2ecc71', '#3498db', '#9b59b6', '#8d6e63', '#ff6fa8'];
+  var draw = { color: COLORS[0], lines: [], current: null };
+  var dc = $('draw-canvas'), dctx = dc.getContext('2d');
+
+  COLORS.forEach(function (c, i) {
+    var b = document.createElement('button');
+    b.style.background = c;
+    b.setAttribute('aria-label', 'Color ' + (i + 1));
+    if (i === 0) b.classList.add('selected');
+    b.addEventListener('click', function () {
+      draw.color = c;
+      $('palette').querySelectorAll('button').forEach(function (x) { x.classList.toggle('selected', x === b); });
+    });
+    $('palette').appendChild(b);
+  });
+
+  function openDraw() {
+    draw.lines = [];
+    show('draw');
+    say('Dibuja tu imagen secreta');
+    requestAnimationFrame(sizeDraw);
+  }
+
+  function sizeDraw() {
+    var dpr = window.devicePixelRatio || 1;
+    dc.width = dc.clientWidth * dpr;
+    dc.height = dc.clientHeight * dpr;
+    dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    renderDraw(dctx, 1);
+  }
+  window.addEventListener('resize', function () { if ($('draw').classList.contains('active')) sizeDraw(); });
+
+  // Los trazos se guardan en proporción al ancho para poder redibujarlos a cualquier tamaño.
+  function renderDraw(ctx, k) {
+    var w = dc.clientWidth * k;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, dc.clientHeight * k);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    draw.lines.forEach(function (ln) {
+      ctx.strokeStyle = ln.color;
+      ctx.lineWidth = 0.025 * w;
+      ctx.beginPath();
+      ctx.moveTo(ln.pts[0][0] * w, ln.pts[0][1] * w);
+      ln.pts.forEach(function (p) { ctx.lineTo(p[0] * w, p[1] * w); });
+      if (ln.pts.length === 1) ctx.lineTo(ln.pts[0][0] * w + 0.1, ln.pts[0][1] * w);
+      ctx.stroke();
+    });
+  }
+
+  function drawPoint(e) {
+    var r = dc.getBoundingClientRect();
+    return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.width];
+  }
+  dc.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    try { dc.setPointerCapture(e.pointerId); } catch (err) { /* sin captura */ }
+    draw.current = { color: draw.color, pts: [drawPoint(e)] };
+    draw.lines.push(draw.current);
+    renderDraw(dctx, 1);
+  });
+  dc.addEventListener('pointermove', function (e) {
+    if (!draw.current) return;
+    draw.current.pts.push(drawPoint(e));
+    renderDraw(dctx, 1);
+  });
+  ['pointerup', 'pointercancel'].forEach(function (ev) {
+    dc.addEventListener(ev, function () { draw.current = null; });
+  });
+
+  $('btn-draw-clear').addEventListener('click', function () {
+    draw.lines = [];
+    renderDraw(dctx, 1);
+  });
+
+  $('btn-draw-next').addEventListener('click', function () {
+    if (!draw.lines.length) { say('Primero dibuja algo'); return; }
+    draw.image = exportDrawing();
+    $('word-drawing').src = draw.image;
+    $('word-input').value = '';
+    $('word-error').textContent = '';
+    openOverlay('word');
+    say('¿Qué dibujaste?');
+    setTimeout(function () { $('word-input').focus(); }, 100);
+  });
+
+  // Imagen del dibujo recortada a lo que se dibujó, para que se vea grande.
+  function exportDrawing() {
+    var full = document.createElement('canvas'), k = 600 / dc.clientWidth;
+    full.width = 600;
+    full.height = Math.round(dc.clientHeight * k);
+    renderDraw(full.getContext('2d'), k);
+    var xs = [], ys = [];
+    draw.lines.forEach(function (ln) { ln.pts.forEach(function (p) { xs.push(p[0] * 600); ys.push(p[1] * 600); }); });
+    var m = 0.04 * 600; // margen: medio grosor del trazo y un poco de aire
+    var x0 = Math.max(0, Math.min.apply(null, xs) - m), y0 = Math.max(0, Math.min.apply(null, ys) - m);
+    var x1 = Math.min(full.width, Math.max.apply(null, xs) + m), y1 = Math.min(full.height, Math.max.apply(null, ys) + m);
+    var side = Math.max(x1 - x0, y1 - y0, 60);
+    var out = document.createElement('canvas');
+    out.width = out.height = 300;
+    var ctx = out.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, 300, 300);
+    // Centrado en un cuadrado.
+    var sc = 300 / side;
+    ctx.drawImage(full, x0, y0, x1 - x0, y1 - y0,
+      (300 - (x1 - x0) * sc) / 2, (300 - (y1 - y0) * sc) / 2, (x1 - x0) * sc, (y1 - y0) * sc);
+    return out.toDataURL('image/png');
+  }
+
+  $('btn-word-back').addEventListener('click', function () { closeOverlay('word'); });
+
+  // Mayúsculas, sin tildes ni espacios (la Ñ se respeta).
+  function normalizeWord(t) {
+    return t.toUpperCase().replace(/Ñ/g, '\u0001').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0001/g, 'Ñ').replace(/[^A-ZÑ]/g, '');
+  }
+
+  function acceptWord() {
+    var word = normalizeWord($('word-input').value);
+    if (word.length < 2) {
+      $('word-error').style.color = 'var(--no)';
+      $('word-error').textContent = 'Escribe una palabra de al menos 2 letras';
+      return;
+    }
+    $('word-input').blur();
+    startGame({ word: word, image: draw.image }, 'pick');
+  }
+  $('btn-word-ok').addEventListener('click', acceptWord);
+  $('word-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') acceptWord(); });
 
   function confetti() {
     var box = $('confetti'), colors = ['#ff7a45', '#4fc3f7', '#2ecc71', '#ffd84d', '#ff6fa8', '#9b59b6'];

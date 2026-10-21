@@ -21,10 +21,22 @@
     <p class="subtitle">El ahorcado para aprender letras</p>
     <div id="home-figure" class="home-figure"></div>
 
-    <p class="label">¿Quién está en el trampolín?</p>
-    <div class="gender">
-      <button class="chip" data-gender="chico">👦 Chico</button>
-      <button class="chip" data-gender="chica">👧 Chica</button>
+    <div class="settings">
+      <p class="label">¿Quién está en el trampolín?</p>
+      <div class="chips">
+        <button class="chip" data-setting="gender" data-value="chico">👦 Chico</button>
+        <button class="chip" data-setting="gender" data-value="chica">👧 Chica</button>
+      </div>
+      <p class="label">¿Qué letras escribimos?</p>
+      <div class="chips">
+        <button class="chip" data-setting="case" data-value="upper">ABC</button>
+        <button class="chip" data-setting="case" data-value="lower">abc</button>
+      </div>
+      <p class="label">¿Cómo las escribimos?</p>
+      <div class="chips">
+        <button class="chip" data-setting="write" data-value="guided">👆 Con caminito</button>
+        <button class="chip" data-setting="write" data-value="free">✏️ Libre</button>
+      </div>
     </div>
 
     <button id="btn-mode-pick" class="big-btn primary">🖼️ Yo elijo la imagen</button>
@@ -41,6 +53,35 @@
     <p class="hint">🤫 ¡Que no la vea el otro jugador!</p>
     <div id="pick-grid" class="pick-grid"></div>
   </section>
+
+  <!-- DIBUJAR LA IMAGEN SECRETA -->
+  <section id="draw" class="screen">
+    <header class="bar">
+      <button class="icon-btn" data-go="pick" aria-label="Volver">⬅️</button>
+      <h2>Dibuja tu imagen secreta</h2>
+      <span class="spacer"></span>
+    </header>
+    <canvas id="draw-canvas" class="draw-canvas"></canvas>
+    <div class="palette" id="palette"></div>
+    <div class="row">
+      <button id="btn-draw-clear" class="small-btn">🗑️ Borrar todo</button>
+      <button id="btn-draw-next" class="big-btn primary next-btn">Listo ➡️</button>
+    </div>
+  </section>
+
+  <!-- ESCRIBIR LA PALABRA DEL DIBUJO -->
+  <div id="word" class="overlay">
+    <div class="card">
+      <img id="word-drawing" class="word-drawing" alt="Tu dibujo">
+      <p class="question">¿Qué dibujaste? <br><small>Un adulto puede ayudar a escribir la palabra</small></p>
+      <input id="word-input" class="word-input" type="text" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="GATO">
+      <p id="word-error" class="feedback"></p>
+      <div class="row">
+        <button id="btn-word-back" class="big-btn secondary">✏️ Dibujar más</button>
+        <button id="btn-word-ok" class="big-btn primary">¡A jugar!</button>
+      </div>
+    </div>
+  </div>
 
   <!-- JUEGO -->
   <section id="game" class="screen">
@@ -78,9 +119,11 @@
       </div>
       <canvas id="trace-canvas"></canvas>
       <div class="row">
-        <button id="btn-trace-reset" class="small-btn">🔄 Empezar de nuevo</button>
+        <button id="btn-trace-reset" class="small-btn">🔄 Borrar</button>
+        <button id="btn-trace-help" class="small-btn">👆 Ayuda</button>
         <button id="btn-trace-say" class="small-btn">🔊 Escuchar</button>
       </div>
+      <button id="btn-trace-done" class="big-btn yes">✅ Listo</button>
     </div>
   </div>
 

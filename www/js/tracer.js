@@ -10,6 +10,8 @@
   var TOLERANCE = 10;      // qué tan lejos del camino se acepta el dedo (unidades de letra)
   var COVERAGE_OK = 0.8;   // porcentaje del trazo que hay que cubrir
   var PRECISION_MIN = 0.55; // porcentaje mínimo de la tinta que debe estar sobre el camino
+  var FREE_TOLERANCE = 13;  // en modo libre se acepta una letra un poco más "suelta"
+  var FREE_COVERAGE_OK = 0.7;
   var COLORS = ['#e74c3c', '#3498db', '#27ae60', '#9b59b6'];
 
   function dist(a, b) {
@@ -68,7 +70,11 @@
     this.ctx = canvas.getContext('2d');
     this.letter = letter;
     this.opts = opts || {};
-    this.strokes = window.LETTERS[letter].map(function (s) { return resample(s, 2); });
+    this.lower = !!this.opts.lower;
+    this.free = !!this.opts.free; // modo libre: sin caminito, se revisa al tocar "Listo"
+    this.lines = window.LETTER_LINES[this.lower ? 'lower' : 'upper'];
+    var set = this.lower ? window.LOWER_LETTERS : window.LETTERS;
+    this.strokes = set[letter].map(function (s) { return resample(s, 2); });
     this.current = 0;
     this.accepted = [];   // tinta aceptada: lista de líneas
     this.pending = [];    // tinta del trazo actual (puede tener varias líneas si levanta el dedo)
@@ -85,6 +91,11 @@
     canvas.addEventListener('pointerup', this._onUp);
     canvas.addEventListener('pointercancel', this._onUp);
     window.addEventListener('resize', this._onResize);
+    // El tamaño también cambia si el mensaje de arriba ocupa más líneas.
+    if (window.ResizeObserver) {
+      this._observer = new ResizeObserver(this._onResize);
+      this._observer.observe(canvas);
+    }
 
     this.resize();
     this.loop();
@@ -98,7 +109,7 @@
     this.canvas.width = w * dpr;
     this.canvas.height = h * dpr;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.pad = this.size * 0.1;
+    this.pad = this.size * 0.11;
     this.scale = (this.size - this.pad * 2) / 100;
     this.offX = (w - this.size) / 2 + this.pad;
     this.offY = (h - this.size) / 2 + this.pad;
@@ -136,25 +147,25 @@
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // Renglones de cuaderno: arriba, medio (punteado) y abajo.
+    // Renglones de cuaderno (los punteados son guías intermedias).
     ctx.lineWidth = 2;
-    [[10, '#9ecbf0', []], [50, '#cfe3f5', [8, 8]], [90, '#9ecbf0', []]].forEach(function (r) {
-      ctx.strokeStyle = r[1];
-      ctx.setLineDash(r[2]);
+    this.lines.forEach(function (r) {
+      ctx.strokeStyle = r[1] ? '#cfe3f5' : '#9ecbf0';
+      ctx.setLineDash(r[1] ? [8, 8] : []);
       self.path([[-8, r[0]], [108, r[0]]]);
       ctx.stroke();
     });
     ctx.setLineDash([]);
 
-    // Caminito de cada trazo.
-    this.strokes.forEach(function (st, i) {
+    // Caminito de cada trazo (en modo libre no hay ayudas).
+    if (!this.free) this.strokes.forEach(function (st, i) {
       ctx.lineWidth = 16 * s;
       ctx.strokeStyle = i < self.current ? '#c8f7c5' : i === self.current ? '#ffe9a8' : '#ececec';
       self.path(st);
       ctx.stroke();
     });
 
-    if (!this.finished) {
+    if (!this.finished && !this.free) {
       var st = this.strokes[this.current];
       var color = COLORS[this.current % COLORS.length];
       // Línea central punteada del trazo actual.
@@ -165,7 +176,8 @@
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Flecha al final del trazo.
+      // Flecha al final del trazo (los puntos de la i y la j no llevan).
+      if (strokeLength(st) > 1) {
       var end = this.toScreen(st[st.length - 1]);
       var prev = this.toScreen(st[Math.max(0, st.length - 4)]);
       var ang = Math.atan2(end[1] - prev[1], end[0] - prev[0]);
@@ -177,6 +189,7 @@
       ctx.lineTo(end[0] + Math.cos(ang - 2.5) * ah, end[1] + Math.sin(ang - 2.5) * ah);
       ctx.closePath();
       ctx.fill();
+      }
 
       // Punto de inicio con el número del trazo.
       var start = this.toScreen(st[0]);
@@ -200,7 +213,7 @@
     });
 
     // Dedito guía (sólo cuando el niño no está dibujando).
-    if (!this.finished && !this.drawing && this.pending.length === 0) {
+    if (!this.finished && !this.free && !this.drawing && this.pending.length === 0) {
       var cycle = 2600, t = ((now - this.guideStart) % cycle) / cycle;
       var move = Math.min(1, t / 0.8);
       var g = this.toScreen(pointAt(this.strokes[this.current], move));
@@ -241,7 +254,42 @@
   Tracer.prototype.onUp = function () {
     if (!this.drawing) return;
     this.drawing = null;
-    this.check();
+    if (this.free) {
+      if (this.opts.onInk) this.opts.onInk();
+    } else {
+      this.check();
+    }
+  };
+
+  // Modo libre: revisa la letra completa. Devuelve true si está bien.
+  Tracer.prototype.checkFree = function () {
+    var ink = this.pending;
+    if (!ink.length) return false;
+    var targets = [], inkPts = [];
+    this.strokes.forEach(function (st) { targets = targets.concat(st); });
+    ink.forEach(function (line) { inkPts = inkPts.concat(resample(line, 2)); });
+
+    var covered = targets.filter(function (p) {
+      return ink.some(function (line) { return distToPolyline(p, line) < FREE_TOLERANCE; });
+    }).length / targets.length;
+    var precise = inkPts.filter(function (p) {
+      return this.strokes.some(function (st) { return distToPolyline(p, st) < FREE_TOLERANCE * 1.5; });
+    }, this).length / inkPts.length;
+
+    if (covered >= FREE_COVERAGE_OK && precise >= PRECISION_MIN) {
+      this.accepted = this.pending;
+      this.pending = [];
+      this.finished = true;
+      if (this.opts.onDone) this.opts.onDone(this.snapshot());
+      return true;
+    }
+    return false;
+  };
+
+  // Pasa del modo libre al modo con guía, empezando de cero.
+  Tracer.prototype.showGuide = function () {
+    this.free = false;
+    this.reset();
   };
 
   Tracer.prototype.check = function () {
@@ -287,11 +335,13 @@
   };
 
   // Imagen (PNG transparente) con la letra tal como la escribió el niño.
+  // Cubre de -5 a 115 en vertical para que quepan las letras que bajan (g, j, p, q, y).
   Tracer.prototype.snapshot = function () {
-    var size = 160, c = document.createElement('canvas');
-    c.width = size;
-    c.height = size;
-    var ctx = c.getContext('2d'), k = size / 100;
+    var k = 1.4, c = document.createElement('canvas');
+    c.width = 110 * k;
+    c.height = 120 * k;
+    var ctx = c.getContext('2d');
+    ctx.translate(5 * k, 5 * k);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = 9;
@@ -314,6 +364,7 @@
     this.canvas.removeEventListener('pointerup', this._onUp);
     this.canvas.removeEventListener('pointercancel', this._onUp);
     window.removeEventListener('resize', this._onResize);
+    if (this._observer) this._observer.disconnect();
   };
 
   window.Tracer = Tracer;
