@@ -8,6 +8,10 @@
     try { settings[k] = localStorage.getItem(k) || settings[k]; } catch (e) { /* sin almacenamiento */ }
   });
 
+  // Selfie para la cara (data URL, sólo en este aparato).
+  var photo = null;
+  try { photo = localStorage.getItem('photo'); } catch (e) { /* sin almacenamiento */ }
+
   var state = null;     // partida actual
   var tracer = null;    // pizarra activa
   var recent = [];      // palabras usadas hace poco en modo "Yo adivino"
@@ -175,14 +179,111 @@
 
   /* ---------- Inicio ---------- */
   function renderHome() {
-    $('home-figure').innerHTML = window.figureSVG(window.MAX_ERRORS, settings.gender, false);
-    document.querySelectorAll('.chip').forEach(function (c) {
+    $('home-figure').innerHTML = window.figureSVG(window.MAX_ERRORS, settings.gender, false, photo);
+    $('btn-photo').textContent = photo ? '📷 Cambiar foto' : '📷 Foto';
+    $('btn-photo').classList.toggle('selected', !!photo);
+    $('btn-photo-remove').hidden = !photo;
+    document.querySelectorAll('.chip[data-setting]').forEach(function (c) {
       c.classList.toggle('selected', settings[c.getAttribute('data-setting')] === c.getAttribute('data-value'));
     });
     document.body.classList.toggle('lower-case', isLower());
     document.body.classList.toggle('cursive', isCursive());
     renderSound();
   }
+
+  /* ---------- Selfie ---------- */
+  // Se elige o se toma una foto, se encuadra la cara arrastrando y acercando, y se guarda
+  // como un cuadrado chico (para que quepa en el almacenamiento del navegador).
+  var shot = { img: null, zoom: 1, x: 0, y: 0, drag: null };
+  var pc = $('photo-canvas'), pctx = pc.getContext('2d');
+
+  $('btn-photo').addEventListener('click', function () { $('photo-input').click(); });
+  $('btn-photo-again').addEventListener('click', function () { $('photo-input').click(); });
+  $('btn-photo-remove').addEventListener('click', function () {
+    photo = null;
+    try { localStorage.removeItem('photo'); } catch (e) { /* sin almacenamiento */ }
+    renderHome();
+  });
+
+  $('photo-input').addEventListener('change', function () {
+    var file = this.files && this.files[0];
+    this.value = '';
+    if (!file) return;
+    var img = new Image();
+    img.onload = function () {
+      shot.img = img;
+      shot.zoom = 1;
+      $('photo-zoom').value = 1;
+      // Empezamos centrados, un poco hacia arriba (en las selfies la cara suele estar arriba).
+      shot.x = 0;
+      shot.y = Math.max(0, img.height - img.width) * -0.25 / Math.max(img.width, img.height);
+      openOverlay('photo');
+      requestAnimationFrame(function () {
+        var dpr = window.devicePixelRatio || 1;
+        pc.width = pc.clientWidth * dpr;
+        pc.height = pc.clientHeight * dpr;
+        drawShot(pctx, pc.width, true);
+      });
+    };
+    img.src = URL.createObjectURL(file);
+  });
+
+  // Dibuja la foto en un cuadrado de lado `size`. x/y es el corrimiento en fracciones del lado.
+  function drawShot(ctx, size, guide) {
+    var img = shot.img, base = size / Math.min(img.width, img.height), sc = base * shot.zoom;
+    var w = img.width * sc, h = img.height * sc;
+    ctx.fillStyle = '#222';
+    ctx.fillRect(0, 0, size, size);
+    ctx.drawImage(img, (size - w) / 2 + shot.x * size, (size - h) / 2 + shot.y * size, w, h);
+    if (!guide) return;
+    // Oscurecemos lo que queda fuera del círculo.
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath();
+    ctx.rect(0, 0, size, size);
+    ctx.arc(size / 2, size / 2, size * 0.42, 0, Math.PI * 2, true);
+    ctx.fill('evenodd');
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = size * 0.012;
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size * 0.42, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  pc.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    try { pc.setPointerCapture(e.pointerId); } catch (err) { /* sin captura */ }
+    shot.drag = [e.clientX, e.clientY, shot.x, shot.y];
+  });
+  pc.addEventListener('pointermove', function (e) {
+    if (!shot.drag) return;
+    var w = pc.clientWidth;
+    shot.x = shot.drag[2] + (e.clientX - shot.drag[0]) / w;
+    shot.y = shot.drag[3] + (e.clientY - shot.drag[1]) / w;
+    drawShot(pctx, pc.width, true);
+  });
+  ['pointerup', 'pointercancel'].forEach(function (ev) {
+    pc.addEventListener(ev, function () { shot.drag = null; });
+  });
+  $('photo-zoom').addEventListener('input', function () {
+    shot.zoom = parseFloat(this.value);
+    drawShot(pctx, pc.width, true);
+  });
+
+  $('btn-photo-ok').addEventListener('click', function () {
+    // Guardamos sólo el círculo, ampliado a todo el cuadrado.
+    var full = document.createElement('canvas'), size = 400;
+    full.width = full.height = size;
+    drawShot(full.getContext('2d'), size, false);
+    var out = document.createElement('canvas'), r = size * 0.42;
+    out.width = out.height = 160;
+    out.getContext('2d').drawImage(full, size / 2 - r, size / 2 - r, r * 2, r * 2, 0, 0, 160, 160);
+    photo = out.toDataURL('image/jpeg', 0.85);
+    try { localStorage.setItem('photo', photo); } catch (e) { /* sin almacenamiento: dura sólo esta vez */ }
+    closeOverlay('photo');
+    renderHome();
+  });
 
   /* ---------- Voz y sonidos encendidos/apagados ---------- */
   function saveSetting(key, value) {
@@ -216,7 +317,7 @@
     if (value === 'off') stopVoice();
     renderSound();
   });
-  document.querySelectorAll('.chip').forEach(function (c) {
+  document.querySelectorAll('.chip[data-setting]').forEach(function (c) {
     c.addEventListener('click', function () {
       var key = c.getAttribute('data-setting');
       settings[key] = c.getAttribute('data-value');
@@ -304,7 +405,7 @@
   });
 
   function renderFigure(fallen) {
-    $('figure').innerHTML = window.figureSVG(state.errors, settings.gender, fallen);
+    $('figure').innerHTML = window.figureSVG(state.errors, settings.gender, fallen, photo);
     var left = window.MAX_ERRORS - state.errors;
     $('lives').textContent = '❤️ ' + left;
   }

@@ -4,8 +4,10 @@
  */
 (function () {
   var MAX_ERRORS = 6;
+  var uid = 0;
 
-  function figureSVG(errors, gender, fallen) {
+  // photo (opcional): selfie recortada en cuadrado, como data URL; reemplaza la cara dibujada.
+  function figureSVG(errors, gender, fallen, photo) {
     var girl = gender === 'chica';
     var worried = errors >= MAX_ERRORS - 2;
     var skin = '#f5c99b', shirt = girl ? '#ff6fa8' : '#3b8beb', pants = girl ? '#ff6fa8' : '#2c3e70';
@@ -20,11 +22,21 @@
       var mouth = worried
         ? '<path d="M114 81 q6 -5 12 0" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/>'
         : '<path d="M114 78 q6 6 12 0" stroke="#333" stroke-width="2" fill="none" stroke-linecap="round"/>';
-      p.push(
-        '<g class="part">' + '<circle cx="120" cy="72" r="16" fill="' + skin + '"/>' + hair +
-        '<circle cx="114" cy="72" r="2.2" fill="#333"/><circle cx="126" cy="72" r="2.2" fill="#333"/>' +
-        (worried ? '<circle cx="134" cy="66" r="2.5" fill="#7fd3ff"/>' : '') + mouth + '</g>'
-      );
+      var sweat = worried ? '<circle cx="137" cy="62" r="2.8" fill="#7fd3ff"/>' : '';
+      if (photo) {
+        var id = 'cara' + (++uid);
+        p.push(
+          '<g class="part"><clipPath id="' + id + '"><circle cx="120" cy="66" r="22"/></clipPath>' +
+          '<image href="' + photo + '" x="98" y="44" width="44" height="44" clip-path="url(#' + id + ')" preserveAspectRatio="xMidYMid slice"/>' +
+          '<circle cx="120" cy="66" r="22" fill="none" stroke="' + shirt + '" stroke-width="2.5"/>' + sweat + '</g>'
+        );
+      } else {
+        p.push(
+          '<g class="part">' + '<circle cx="120" cy="72" r="16" fill="' + skin + '"/>' + hair +
+          '<circle cx="114" cy="72" r="2.2" fill="#333"/><circle cx="126" cy="72" r="2.2" fill="#333"/>' +
+          sweat + mouth + '</g>'
+        );
+      }
     }
     // 2. Cuerpo
     if (errors >= 2) {

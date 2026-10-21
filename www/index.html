@@ -26,7 +26,10 @@
       <div class="chips">
         <button class="chip" data-setting="gender" data-value="chico">👦 Chico</button>
         <button class="chip" data-setting="gender" data-value="chica">👧 Chica</button>
+        <button id="btn-photo" class="chip photo-chip">📷 Foto</button>
+        <button id="btn-photo-remove" class="chip" hidden aria-label="Quitar la foto">✖</button>
       </div>
+      <input id="photo-input" type="file" accept="image/*" capture="user" hidden>
       <p class="label">¿Qué letras escribimos?</p>
       <div class="chips">
         <button class="chip" data-setting="case" data-value="upper">ABC</button>
@@ -106,6 +109,21 @@
     <p id="game-hint" class="hint"></p>
     <div id="keyboard" class="keyboard"></div>
   </section>
+
+  <!-- ENCUADRAR LA SELFIE -->
+  <div id="photo" class="overlay">
+    <div class="card">
+      <h2>Acomoda la cara en el círculo</h2>
+      <p class="hint">Arrastra la foto con el dedo y usa la barra para acercar.</p>
+      <canvas id="photo-canvas" class="photo-canvas"></canvas>
+      <label class="zoom">🔍 <input id="photo-zoom" type="range" min="1" max="4" step="0.01" value="1"></label>
+      <div class="row">
+        <button id="btn-photo-again" class="big-btn secondary">📷 Otra</button>
+        <button id="btn-photo-ok" class="big-btn primary">✅ Usar</button>
+      </div>
+      <p class="privacy">La foto se guarda sólo en este aparato.</p>
+    </div>
+  </div>
 
   <!-- ¿ESTÁ LA LETRA? -->
   <div id="ask" class="overlay">

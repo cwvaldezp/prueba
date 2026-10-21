@@ -21,6 +21,8 @@ imagen secreta con colores. Después un adulto escribe qué es (por ejemplo "pi�
 y, cuando acierta, también las escribe.
 
 ### Opciones en la pantalla de inicio
+- **📷 Foto:** se toma una selfie (o se elige una foto) del que juega y su cara aparece en el niño o niña del
+  trampolín. Se encuadra arrastrando y acercando; se guarda sólo en ese aparato y se quita con ✖.
 - **ABC / abc / cursiva:** escribir en mayúsculas, minúsculas o cursiva (letra ligada, minúsculas), cada una
   con sus renglones y su forma de trazarse.
 - **👆 Con caminito / ✏️ Libre:** con caminito, el niño repasa cada trazo guiado. En modo libre escribe la

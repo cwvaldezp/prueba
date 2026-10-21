@@ -250,3 +250,10 @@ h2 { margin: 0; font-size: clamp(20px, 5.5vw, 28px); text-align: center; }
 
 /* Grupos de imágenes por categoría */
 .pick-group { grid-column: 1 / -1; margin: 10px 0 0; font-size: 20px; color: var(--ink); text-align: left; }
+
+/* Selfie para la cara del niño del trampolín */
+.photo-canvas { width: min(70vw, 280px); height: min(70vw, 280px); border-radius: 18px; touch-action: none; background: #222; margin: 8px 0; }
+.zoom { display: flex; align-items: center; gap: 8px; width: min(70vw, 280px); font-size: 20px; }
+.zoom input { flex: 1; accent-color: var(--primary); }
+.privacy { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
+.photo-chip.selected { border-color: var(--primary); background: #fff0e8; }
