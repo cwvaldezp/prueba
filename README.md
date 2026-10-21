@@ -46,7 +46,7 @@ Abrir http://localhost:8080
 ## Instalar en el teléfono (lo más fácil)
 
 1. Publicar la carpeta `www/` en cualquier hosting con HTTPS. Este repo trae una acción de GitHub
-   (`.github/workflows/pages.yml`) que la publica en **GitHub Pages** al hacer push a `main`
+   (`.github/workflows/pages.yml`) que la publica en **GitHub Pages** cada vez que cambia la rama principal
    (activar en *Settings → Pages → Source: GitHub Actions*).
 2. En el teléfono abrir la página y:
    - **iPhone/iPad (Safari):** Compartir → *Agregar a pantalla de inicio*.

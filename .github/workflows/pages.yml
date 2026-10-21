@@ -1,14 +1,19 @@
 name: Publicar en GitHub Pages
+# Publica la carpeta www/ cada vez que cambia la rama principal del repositorio
+# (sea cual sea su nombre). También se puede lanzar a mano desde la pestaña Actions.
 on:
   push:
-    branches: [main, master]
   workflow_dispatch:
 permissions:
   contents: read
   pages: write
   id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
 jobs:
   deploy:
+    if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
     environment:
       name: github-pages
