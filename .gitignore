@@ -3,3 +3,4 @@ node_modules/
 /ios/
 .DS_Store
 tools/voces/
+__pycache__/
