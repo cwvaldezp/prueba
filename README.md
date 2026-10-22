@@ -82,3 +82,25 @@ publicar en Play Store. Para armarlo en una computadora con Android Studio: `npm
     tinta de más, y no puede parecerse más a otra letra (así una b no pasa por d ni una o por a).
   - Prueba automática con escritura simulada y garabatos: `node tests/revision-letras.js`.
 - **Qué tan exigente es al escribir:** las constantes al inicio de `www/js/tracer.js`.
+
+## Mis números 🔢 (`www/numeros/`)
+
+Una segunda página, hermana de [Mi abecedario](https://github.com/cwvaldezp/abecedario-guiado), para
+practicar **los números**. Se publica junto al juego, en `…/numeros/`, y también se instala como app aparte.
+
+1. Toca **▶️ ¡A escribir!**. Aparece el número (por ejemplo **3 tres 🐱**) y la voz dice "tres. Escribe el tres".
+2. El niño repasa el número por el caminito (punto verde 🟢, flecha y dedito 👆). Garabatos e ir y venir no cuentan.
+3. **Después de escribirlo, lo cuenta.** Aparecen 3 gatitos en filas de 5 (como los dedos de una mano);
+   al tocar cada uno se marca y la voz cuenta "uno, dos, tres… ¡Son tres gatitos!". En el cero aparece una
+   canasta vacía: "el cero es cuando no hay nada".
+4. Cada número gana una estrella ⭐; al completar la ronda se desbloquea el **premio** (video), igual que en el abecedario.
+
+**Para adultos** (se entra resolviendo una multiplicación), además de lo que ya tenía el abecedario:
+- **Qué números:** 1 al 5, 0 al 10 o **0 al 20** (los de dos cifras se escriben cifra por cifra).
+- **Orden:** 1, 2, 3… en orden, o **salteados** (primero salen los que todavía no tienen estrella y después
+  los que más le cuestan).
+- **Contar los dibujitos** sí/no, y **caminito ancho** (3–4 años) o **angosto** (5 años o más).
+- **Los que más le cuestan:** se anota cuántas veces se le borró el trazo en cada número y se muestran los más difíciles.
+
+Trazos, nombres, dibujitos y frases: `www/numeros/js/numbers.js`. Después de cambiar frases o dibujitos,
+regrabar la voz con `python3 tools/generar-voz-numeros.py`. Prueba de la revisión: `node tests/revision-numeros.js`.
