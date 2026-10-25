@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#ff7a45">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Números">
+  <title>Mis números</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- INICIO -->
+  <section id="home" class="screen active">
+    <h1>Mis números</h1>
+    <p class="subtitle">Escribe los números, cuenta y gana tu premio</p>
+    <div id="stars" class="stars" aria-label="Números que ya escribiste"></div>
+    <button id="btn-play" class="big-btn primary">▶️ ¡A escribir!</button>
+    <p id="goal-text" class="goal-text"></p>
+    <button id="btn-parents" class="parents-btn">👪 Para adultos</button>
+  </section>
+
+  <!-- ESCRIBIR UN NÚMERO -->
+  <section id="practice" class="screen">
+    <header class="bar">
+      <button class="icon-btn" data-go="home" aria-label="Inicio">🏠</button>
+      <div class="session-stars" aria-label="Estrellas de hoy"></div>
+      <button class="icon-btn btn-mute" aria-label="Quitar sonido">🔊</button>
+    </header>
+    <button id="word-card" class="word-card" aria-label="Escuchar">
+      <b id="word-number"></b>
+      <span id="word-name"></span>
+      <span id="word-emoji" class="word-emoji"></span>
+    </button>
+    <canvas id="trace-canvas"></canvas>
+    <p id="trace-msg" class="trace-msg"></p>
+    <div class="row">
+      <button id="btn-reset" class="small-btn">🔄 Borrar</button>
+      <button id="btn-say" class="small-btn">🔊 Escuchar</button>
+    </div>
+  </section>
+
+  <!-- CONTAR -->
+  <section id="count" class="screen">
+    <header class="bar">
+      <button class="icon-btn" data-go="home" aria-label="Inicio">🏠</button>
+      <div class="session-stars" aria-label="Estrellas de hoy"></div>
+      <button class="icon-btn btn-mute" aria-label="Quitar sonido">🔊</button>
+    </header>
+    <div class="count-head">
+      <img id="my-number" class="my-number" alt="Tu número">
+      <p id="count-title" class="count-title"></p>
+    </div>
+    <div id="count-box" class="count-box"></div>
+    <p id="count-msg" class="count-msg"></p>
+  </section>
+
+  <!-- PREMIO -->
+  <section id="reward" class="screen">
+    <header class="bar">
+      <button class="icon-btn" id="btn-reward-home" aria-label="Terminar">🏠</button>
+      <h2>🎉 ¡Lo lograste!</h2>
+      <span class="spacer"></span>
+    </header>
+    <div id="reward-box" class="reward-box"></div>
+  </section>
+
+  <!-- PREGUNTA PARA ADULTOS -->
+  <div id="gate" class="overlay">
+    <div class="card">
+      <h2>Sólo para adultos</h2>
+      <p id="gate-question" class="question"></p>
+      <input id="gate-answer" class="gate-input" type="number" inputmode="numeric" autocomplete="off">
+      <p id="gate-error" class="feedback"></p>
+      <div class="row">
+        <button id="btn-gate-cancel" class="big-btn secondary">Cancelar</button>
+        <button id="btn-gate-ok" class="big-btn primary">Entrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AJUSTES PARA ADULTOS -->
+  <section id="parents" class="screen">
+    <header class="bar">
+      <button class="icon-btn" data-go="home" aria-label="Volver">⬅️</button>
+      <h2>Ajustes para adultos</h2>
+      <span class="spacer"></span>
+    </header>
+    <div class="settings">
+      <h3>¿Qué números practica?</h3>
+      <div class="chips">
+        <button class="chip" data-setting="range" data-value="5">1 al 5</button>
+        <button class="chip" data-setting="range" data-value="10">0 al 10</button>
+        <button class="chip" data-setting="range" data-value="20">0 al 20</button>
+      </div>
+
+      <h3>¿En qué orden?</h3>
+      <div class="chips">
+        <button class="chip" data-setting="order" data-value="seq">1, 2, 3… en orden</button>
+        <button class="chip" data-setting="order" data-value="mix">🔀 Salteados</button>
+      </div>
+      <p class="note">Salteados: primero salen los que todavía no tienen estrella.</p>
+
+      <h3>¿Cuántos números para ganar el premio?</h3>
+      <div class="chips">
+        <button class="chip" data-setting="goal" data-value="3">3</button>
+        <button class="chip" data-setting="goal" data-value="5">5</button>
+        <button class="chip" data-setting="goal" data-value="10">10</button>
+        <button class="chip" data-setting="goal" data-value="all">Todos</button>
+      </div>
+      <p class="note">El premio se ve una vez por cada vez que lo gana.</p>
+
+      <h3>Después de escribir</h3>
+      <div class="chips">
+        <button class="chip" data-setting="count" data-value="on">👆 Contar los dibujitos</button>
+        <button class="chip" data-setting="count" data-value="off">Sólo escribir</button>
+      </div>
+
+      <h3>El caminito</h3>
+      <div class="chips">
+        <button class="chip" data-setting="level" data-value="easy">Ancho (3–4 años)</button>
+        <button class="chip" data-setting="level" data-value="normal">Angosto (5 años o más)</button>
+      </div>
+
+      <h3>El premio</h3>
+      <div class="chips">
+        <button class="chip" data-setting="reward" data-value="youtube">▶️ Video de YouTube</button>
+        <button class="chip" data-setting="reward" data-value="file">📁 Video del teléfono</button>
+      </div>
+      <div id="reward-youtube" class="reward-field">
+        <label for="yt-link">Pega el enlace del video (YouTube o YouTube Kids):</label>
+        <input id="yt-link" type="url" placeholder="https://youtu.be/…" autocomplete="off">
+        <p id="yt-status" class="note"></p>
+      </div>
+      <div id="reward-file" class="reward-field">
+        <button id="btn-video-file" class="small-btn">📁 Elegir video</button>
+        <input id="video-file" type="file" accept="video/*" hidden>
+        <p id="file-status" class="note"></p>
+      </div>
+
+      <h3>Sonido</h3>
+      <div class="chips">
+        <button class="chip" data-setting="voice" data-value="on">🗣️ Con voz</button>
+        <button class="chip" data-setting="voice" data-value="off">🔇 Sin voz</button>
+      </div>
+
+      <h3>Progreso</h3>
+      <p id="hard-list" class="note"></p>
+      <button id="btn-restart" class="small-btn">🔁 Volver a empezar</button>
+      <p id="restart-status" class="note"></p>
+    </div>
+  </section>
+
+  <div id="confetti" class="confetti"></div>
+
+  <script src="js/numbers.js"></script>
+  <script src="js/voice-clips.js"></script>
+  <script src="js/tracer.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
