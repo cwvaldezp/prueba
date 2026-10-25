@@ -104,3 +104,45 @@ practicar **los números**. Se publica junto al juego, en `…/numeros/`, y tamb
 
 Trazos, nombres, dibujitos y frases: `www/numeros/js/numbers.js`. Después de cambiar frases o dibujitos,
 regrabar la voz con `python3 tools/generar-voz-numeros.py`. Prueba de la revisión: `node tests/revision-numeros.js`.
+
+## Mis cuentas 🏠 (`www/cuentas/`)
+
+Un portal para llevar **las cuentas personales y las de los inmuebles que administro**. Se publica junto al
+juego, en `…/cuentas/`, y se puede instalar en el teléfono como app (Compartir → *Agregar a pantalla de inicio*).
+
+- **Tres tipos de movimiento:** *ingreso* (alquiler, sueldo), *gasto* (luz, impuestos, arreglos) y *egreso*
+  (dinero que sale sin ser gasto: la transferencia a la dueña, un retiro, el ahorro).
+- **Por cada cuenta o inmueble:** ingresos, gastos, comisión de administración (si tiene), resultado, egresos y
+  **saldo en caja**, es decir, lo que falta entregar a la dueña. Por mes, por año o de todo el historial, con
+  el saldo anterior, el detalle por categoría y un gráfico de los últimos 12 meses.
+- **Total de todas las cuentas** en el resumen (separado por moneda si hay más de una).
+- **La dueña entra con su correo y ve sólo su inmueble** (o lo suyo y nada más). Se le puede dar acceso de
+  *sólo ver* o de *ver y cargar movimientos*.
+- **Cobros y pagos fijos:** alquiler, expensas o la entrega mensual. El resumen avisa lo que falta registrar
+  cada mes y se registra con un toque.
+- **Comprobantes:** a cada movimiento se le puede adjuntar la foto o el PDF de la factura o el recibo.
+- **Aviso cuando se acerca el fin de un contrato** de alquiler.
+- **Estado de cuenta para imprimir o guardar en PDF** y **exportar a Excel (CSV)**.
+- Cuentas **archivadas** para los inmuebles que ya no administro, sin perder el historial.
+
+### Probarlo
+Abrir `…/cuentas/` (o `npm start` y http://localhost:8080/cuentas/). Mientras no esté configurado, funciona en
+**modo de prueba**: trae datos de ejemplo, guarda sólo en ese navegador y deja cambiar arriba entre
+"Yo (administrador)" y "María (dueña)" para ver lo que ve cada uno.
+
+### Ponerlo a funcionar de verdad (una sola vez, gratis)
+Los datos y los usuarios quedan en [Supabase](https://supabase.com) (plan gratuito).
+1. Crear una cuenta en Supabase y un proyecto nuevo.
+2. En **SQL Editor** pegar todo `supabase/esquema.sql` y tocar **Run**. Crea las tablas, los permisos (cada uno
+   ve sólo lo suyo) y el lugar para los comprobantes.
+3. En **Authentication → URL Configuration** poner como *Site URL* la dirección del portal
+   (por ejemplo `https://cwvaldezp.github.io/prueba/cuentas/`). Dejar activado *Confirm email* en
+   **Authentication → Providers → Email**: así nadie puede crear un usuario con el correo de otra persona.
+4. En **Settings → API** copiar *Project URL* y la clave *anon public* a `www/cuentas/js/config.js`
+   (ahí también se elige la moneda y el formato del CSV) y subir el cambio.
+5. Entrar al portal, **Crear mi usuario**, confirmar el correo y tocar **Ser el administrador**
+   (sólo lo puede hacer el primero).
+6. Crear las cuentas (en **Cuentas**). En cada inmueble que no es mío: **Dar acceso** con el correo de la
+   dueña. Ella crea su usuario con ese correo (o pide un enlace para entrar sin contraseña) y ve sólo lo suyo.
+
+Prueba de los cálculos y permisos del modo de prueba: `node tests/cuentas.js`.

@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f6f5c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Cuentas">
+  <title>Mis cuentas</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="demo-banner" class="demo-banner" hidden>
+    <span>🧪 <b>Modo de prueba</b>: los datos quedan sólo en este navegador.</span>
+    <label>Ver como <select id="demo-user"></select></label>
+    <button type="button" class="link" data-action="reiniciar-demo">Reiniciar ejemplo</button>
+  </div>
+
+  <!-- ENTRAR -->
+  <main id="login" class="login" hidden>
+    <div class="login-card">
+      <div class="logo">🏠</div>
+      <h1>Mis cuentas</h1>
+      <p class="muted">Ingresos, gastos y egresos de tus cuentas e inmuebles.</p>
+      <form id="login-form" autocomplete="on">
+        <label>Correo <input id="login-email" type="email" required autocomplete="email" placeholder="tu@correo.com"></label>
+        <label id="login-pass-row">Contraseña <input id="login-pass" type="password" minlength="6" autocomplete="current-password"></label>
+        <button type="submit" class="btn primary" data-modo="entrar">Entrar</button>
+        <div class="login-alt">
+          <button type="submit" class="btn" data-modo="registrarse">Crear mi usuario</button>
+          <button type="submit" class="btn" data-modo="enlace">Enviarme un enlace para entrar</button>
+        </div>
+        <p id="login-msg" class="msg" role="status"></p>
+      </form>
+      <p class="muted small">¿Te dieron acceso a un inmueble? Crea tu usuario con el mismo correo al que te invitaron
+        o pide un enlace para entrar sin contraseña.</p>
+    </div>
+  </main>
+
+  <!-- PORTAL -->
+  <div id="app" hidden>
+    <header class="top">
+      <a class="brand" href="#resumen">🏠 <span>Mis cuentas</span></a>
+      <nav class="tabs" id="tabs">
+        <a href="#resumen" data-tab="resumen">📊 <span>Resumen</span></a>
+        <a href="#movimientos" data-tab="movimientos">📒 <span>Movimientos</span></a>
+        <a href="#cuentas" data-tab="cuentas" class="solo-admin">🏢 <span>Cuentas</span></a>
+      </nav>
+      <div class="who">
+        <span id="who-email" class="muted small"></span>
+        <button type="button" class="btn small" data-action="salir">Salir</button>
+      </div>
+    </header>
+    <main id="view" class="view"></main>
+    <button type="button" id="fab" class="fab" data-action="nuevo-movimiento" aria-label="Agregar movimiento" hidden>＋</button>
+  </div>
+
+  <!-- FORMULARIOS -->
+  <dialog id="dlg-mov">
+    <form method="dialog" id="form-mov">
+      <h2 id="mov-titulo">Nuevo movimiento</h2>
+      <div class="seg" role="radiogroup" aria-label="Tipo">
+        <label><input type="radio" name="tipo" value="ingreso" checked><span class="t-ingreso">Ingreso</span></label>
+        <label><input type="radio" name="tipo" value="gasto"><span class="t-gasto">Gasto</span></label>
+        <label><input type="radio" name="tipo" value="egreso"><span class="t-egreso">Egreso</span></label>
+      </div>
+      <p class="muted small" id="mov-ayuda"></p>
+      <label>Cuenta <select name="cuenta_id" required></select></label>
+      <div class="row2">
+        <label>Fecha <input type="date" name="fecha" required></label>
+        <label>Monto <input type="number" name="monto" min="0.01" step="0.01" inputmode="decimal" required></label>
+      </div>
+      <label>Categoría <input name="categoria" list="lista-categorias" required autocomplete="off"></label>
+      <datalist id="lista-categorias"></datalist>
+      <label>Descripción <input name="descripcion" autocomplete="off" placeholder="Ej.: factura de luz de agosto"></label>
+      <label>Comprobante (foto o PDF) <input type="file" name="archivo" accept="image/*,application/pdf"></label>
+      <p class="small" id="mov-comprobante"></p>
+      <p class="msg" id="mov-msg" role="status"></p>
+      <div class="acciones">
+        <button type="button" class="btn danger" id="mov-borrar">Borrar</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn primary" value="ok">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-cuenta">
+    <form method="dialog" id="form-cuenta">
+      <h2 id="cuenta-titulo">Nueva cuenta</h2>
+      <div class="seg" role="radiogroup" aria-label="Tipo de cuenta">
+        <label><input type="radio" name="tipo" value="inmueble" checked><span>🏢 Inmueble</span></label>
+        <label><input type="radio" name="tipo" value="personal"><span>👤 Personal</span></label>
+      </div>
+      <label>Nombre <input name="nombre" required placeholder="Ej.: Depto. Centro"></label>
+      <div class="row2">
+        <label>Moneda <input name="moneda" required maxlength="3" pattern="[A-Za-z]{3}" title="Código de 3 letras, por ejemplo USD"></label>
+        <label class="solo-inmueble">Comisión de administración (%) <input type="number" name="comision_pct" min="0" max="100" step="0.01"></label>
+      </div>
+      <fieldset class="solo-inmueble">
+        <legend>Inmueble</legend>
+        <label>Dirección <input name="direccion"></label>
+        <div class="row2">
+          <label>Inquilino <input name="inquilino"></label>
+          <label>Alquiler mensual <input type="number" name="alquiler" min="0" step="0.01" inputmode="decimal"></label>
+        </div>
+        <label>El contrato vence el <input type="date" name="contrato_fin"></label>
+      </fieldset>
+      <label>Notas <textarea name="notas" rows="2"></textarea></label>
+      <label class="check"><input type="checkbox" name="archivada"> Archivada (ya no la administro; se oculta del resumen)</label>
+      <p class="msg" id="cuenta-msg" role="status"></p>
+      <div class="acciones">
+        <button type="button" class="btn danger" id="cuenta-borrar">Borrar</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn primary" value="ok">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-fijo">
+    <form method="dialog" id="form-fijo">
+      <h2>Cobro o pago fijo mensual</h2>
+      <p class="muted small">Cada mes aparece como pendiente hasta que lo registres.</p>
+      <div class="seg" role="radiogroup" aria-label="Tipo">
+        <label><input type="radio" name="tipo" value="ingreso" checked><span class="t-ingreso">Ingreso</span></label>
+        <label><input type="radio" name="tipo" value="gasto"><span class="t-gasto">Gasto</span></label>
+        <label><input type="radio" name="tipo" value="egreso"><span class="t-egreso">Egreso</span></label>
+      </div>
+      <label>Categoría <input name="categoria" list="lista-categorias-fijo" required autocomplete="off"></label>
+      <datalist id="lista-categorias-fijo"></datalist>
+      <label>Descripción <input name="descripcion" autocomplete="off"></label>
+      <div class="row2">
+        <label>Monto <input type="number" name="monto" min="0.01" step="0.01" inputmode="decimal" required></label>
+        <label>Día del mes <input type="number" name="dia" min="1" max="31" required></label>
+      </div>
+      <label class="check"><input type="checkbox" name="activo" checked> Activo</label>
+      <p class="msg" id="fijo-msg" role="status"></p>
+      <div class="acciones">
+        <button type="button" class="btn danger" id="fijo-borrar">Borrar</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn primary" value="ok">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-acceso">
+    <form method="dialog" id="form-acceso">
+      <h2>Dar acceso</h2>
+      <p class="muted small">La persona entra a este portal con este correo y ve sólo esta cuenta.</p>
+      <label>Correo <input type="email" name="email" required></label>
+      <label>Nombre <input name="nombre" placeholder="Ej.: María (dueña)"></label>
+      <label>Puede
+        <select name="rol">
+          <option value="ver">Sólo ver sus números</option>
+          <option value="editar">Ver y cargar movimientos</option>
+        </select>
+      </label>
+      <p class="msg" id="acceso-msg" role="status"></p>
+      <div class="acciones">
+        <button type="button" class="btn danger" id="acceso-borrar">Quitar acceso</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn primary" value="ok">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="js/config.js"></script>
+  <script>
+    // La librería de Supabase sólo hace falta cuando hay proyecto configurado.
+    if (window.CUENTAS_CONFIG.SUPABASE_URL) {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"><\/script>');
+    }
+  </script>
+  <script src="js/calc.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
