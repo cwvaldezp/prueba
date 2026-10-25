@@ -6,6 +6,7 @@ on:
   push:
     paths:
       - 'www/**'
+      - '!www/cuentas/**'   # el portal de cuentas no va en la app del juego
       - 'assets/**'
       - 'capacitor.config.json'
       - 'package.json'
