@@ -7,6 +7,7 @@ on:
     paths:
       - 'www/**'
       - '!www/cuentas/**'   # el portal de cuentas no va en la app del juego
+      - '!www/barberia/**'  # el portal de barberías tampoco
       - 'assets/**'
       - 'capacitor.config.json'
       - 'package.json'
