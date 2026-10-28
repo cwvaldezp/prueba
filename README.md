@@ -146,3 +146,62 @@ Los datos y los usuarios quedan en [Supabase](https://supabase.com) (plan gratui
    dueña. Ella crea su usuario con ese correo (o pide un enlace para entrar sin contraseña) y ve sólo lo suyo.
 
 Prueba de los cálculos y permisos del modo de prueba: `node tests/cuentas.js`.
+
+## Portal de barberías 💈 (`www/barberia/`)
+
+Un portal donde **las barberías se registran, tú las apruebas** y sus clientes reservan citas. Se publica junto
+al juego, en `…/barberia/`, y se puede instalar en el teléfono como app.
+
+**Quién hace qué**
+- **Superadministrador (tú):** en **🛡️ Revisión** ves las solicitudes con sus documentos. Marcas cada documento
+  con ✓ o ✗ (diciendo qué está mal) y decides: **aprobar**, **pedir corrección** (el dueño corrige y vuelve a
+  enviar), **rechazar** o, más adelante, **suspender** y **reactivar**. Todo con un motivo que le llega al dueño,
+  y queda un historial de quién decidió qué y cuándo. Avisa cuando un documento (licencia, certificado) está por vencer.
+- **Dueño de barbería:** registra su barbería, sube los documentos (foto o PDF) y la envía a revisión. Mientras
+  espera ya puede cargar **barberos** (con su horario de cada día, por ejemplo `09:00-13:00, 15:00-19:00`) y
+  **servicios** (duración y precio). Cuando está aprobada: **agenda del día** por barbero, agendar citas a mano
+  (por ejemplo a quien llamó por teléfono), marcar atendida / no vino, y su **lista de clientes**.
+- **Barbero:** si el dueño lo agrega con su correo, entra y ve **su agenda**.
+- **Cliente:** entra con el **enlace o el QR de invitación** que comparte la barbería (o escribe el código).
+  Ve **sólo las barberías a las que se unió**, elige servicio, barbero (o "cualquiera") y día, y reserva una hora libre.
+
+**Invitar clientes:** en *Mi barbería → Clientes* está el enlace, el QR, botones para copiar, compartir por
+WhatsApp e **imprimir un cartel** para el local. "Cambiar código" invalida el enlace anterior (sin perder clientes).
+
+**Cancelar y lista de espera**
+- El cliente puede cancelar hasta **2 horas antes** (cada barbería elige cuántas horas). Después, el portal le
+  muestra el teléfono de la barbería. La barbería puede cancelar siempre, con un motivo que le llega al cliente.
+- Si un cliente no encuentra hora, toca **🔔 Avisarme si se libera un lugar** (puede elegir barbero y franja,
+  por ejemplo "de 9 a 13"). Cuando **alguien cancela**, el portal avisa al instante a todos los que esperaban ese
+  día y esa franja, en orden de llegada, con un enlace directo a la hora libre: **el primero que reserva se la
+  queda**. Al reservar, sale solo de la lista. El dueño ve la lista de espera del día con los teléfonos.
+- Avisos (🔔) también para: nueva solicitud (al superadministrador), resultado de la revisión (al dueño),
+  nueva cita o cancelación (al dueño y al barbero), cliente nuevo y cita agendada por la barbería (al cliente).
+
+### Probarlo
+Abrir `…/barberia/` (o `npm start` y http://localhost:8080/barberia/). Sin configurar funciona en **modo de
+prueba**, con datos de ejemplo, y arriba se cambia de usuario: superadministrador, Carlos (dueño), Pedro (barbero),
+Ana (clienta con cita), Jorge (cliente en lista de espera: mañana está todo lleno), Sofía (barbería en revisión)
+y alguien nuevo (para probar el código `CLASICO7` o registrar una barbería).
+Recorrido sugerido: entrar como Ana y cancelar su cita → entrar como Jorge y ver el aviso 🔔 → reservar.
+
+### Ponerlo a funcionar de verdad
+Igual que *Mis cuentas* (puede ser el mismo proyecto de Supabase):
+1. En **SQL Editor** pegar todo `supabase/barberia.sql` y tocar **Run**.
+2. En **Authentication → URL Configuration** poner como *Site URL* la dirección del portal
+   (por ejemplo `https://cwvaldezp.github.io/prueba/barberia/`) y dejar activado *Confirm email*.
+3. Copiar *Project URL* y la clave *anon public* a `www/barberia/js/config.js`. Ahí también se cambian el nombre
+   del portal, la moneda, **los documentos que se piden**, cada cuántos minutos se ofrecen horas y hasta cuántos
+   días adelante se puede reservar.
+4. Entrar, crear tu usuario y tocar **Ser el superadministrador** (sólo lo puede hacer el primero).
+
+Las reglas importantes las hace cumplir el servidor, no sólo la pantalla: nadie puede aprobarse solo, un cliente
+no ve citas ni datos de otros (sólo qué horas están ocupadas), dos personas no pueden reservar la misma hora con
+el mismo barbero aunque lo hagan al mismo tiempo, y la regla de las 2 horas se revisa al cancelar.
+La hora de las citas es la de la barbería (se toma la zona horaria del aparato con que se registró).
+
+**Pendiente para más adelante:** avisos por WhatsApp o correo (hoy los avisos se ven al abrir el portal; se
+pueden enviar desde una *Edge Function* de Supabase cada vez que se crea una fila en `notificaciones`), pagos en
+línea, reseñas y estadísticas.
+
+Prueba de horarios, cancelaciones, lista de espera y permisos del modo de prueba: `node tests/barberia.js`.

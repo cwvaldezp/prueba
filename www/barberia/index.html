@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2b2d42">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Barberías">
+  <title>Portal de barberías</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="demo-banner" class="demo-banner" hidden>
+    <span>🧪 <b>Modo de prueba</b>: los datos quedan sólo en este navegador.</span>
+    <label>Ver como <select id="demo-user"></select></label>
+    <button type="button" class="link" data-action="reiniciar-demo">Reiniciar ejemplo</button>
+  </div>
+
+  <!-- ENTRAR -->
+  <main id="login" class="login" hidden>
+    <div class="login-card">
+      <div class="logo">💈</div>
+      <h1 class="nombre-portal">Portal de barberías</h1>
+      <p class="muted" id="login-intro">Reserva tu cita en tu barbería o administra la tuya.</p>
+      <form id="login-form" autocomplete="on">
+        <label>Correo <input id="login-email" type="email" required autocomplete="email" placeholder="tu@correo.com"></label>
+        <label id="login-pass-row">Contraseña <input id="login-pass" type="password" minlength="6" autocomplete="current-password"></label>
+        <button type="submit" class="btn primary" data-modo="entrar">Entrar</button>
+        <div class="login-alt">
+          <button type="submit" class="btn" data-modo="registrarse">Crear mi usuario</button>
+          <button type="submit" class="btn" data-modo="enlace">Enviarme un enlace para entrar</button>
+        </div>
+        <p id="login-msg" class="msg" role="status"></p>
+      </form>
+    </div>
+  </main>
+
+  <!-- PORTAL -->
+  <div id="app" hidden>
+    <header class="top">
+      <a class="brand" href="#inicio">💈 <span class="nombre-portal">Portal de barberías</span></a>
+      <nav class="tabs" id="tabs"></nav>
+      <div class="who">
+        <span id="who-email" class="muted small"></span>
+        <button type="button" class="btn small" data-action="salir">Salir</button>
+      </div>
+    </header>
+    <main id="view" class="view"></main>
+  </div>
+
+  <!-- FORMULARIOS -->
+  <dialog id="dlg-barberia">
+    <form method="dialog" id="form-barberia">
+      <h2 id="barberia-titulo">Registrar mi barbería</h2>
+      <label>Nombre de la barbería <input name="nombre" required placeholder="Ej.: Barbería El Clásico"></label>
+      <label>Dirección <input name="direccion" required></label>
+      <label>Teléfono / WhatsApp <input name="telefono" type="tel" required></label>
+      <label>Descripción <textarea name="descripcion" rows="2" placeholder="Lo que quieres que vean tus clientes"></textarea></label>
+      <label>Los clientes pueden cancelar hasta (horas antes)
+        <input type="number" name="cancelar_horas" min="0" max="72" step="0.5" required></label>
+      <p class="muted small" id="barberia-ayuda">Después de guardar, sube los documentos y envíalos a revisión.</p>
+      <p class="msg" id="barberia-msg" role="status"></p>
+      <div class="acciones">
+        <button type="button" class="btn danger" id="barberia-borrar">Borrar</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn primary" value="ok">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-documento">
+    <form method="dialog" id="form-documento">
+      <h2>Subir documento</h2>
+      <label>Documento <select name="tipo" required></select></label>
+      <label>Archivo (foto o PDF) <input type="file" name="archivo" accept="image/*,application/pdf" required></label>
+      <label id="doc-vence-row">Vence el <input type="date" name="vence"></label>
+      <p class="msg" id="documento-msg" role="status"></p>
+      <div class="acciones">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn primary" value="ok">Subir</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-barbero">
+    <form method="dialog" id="form-barbero">
+      <h2 id="barbero-titulo">Barbero</h2>
+      <label>Nombre <input name="nombre" required></label>
+      <label>Correo (opcional) <input name="email" type="email" placeholder="Para que vea su agenda en el portal"></label>
+      <fieldset>
+        <legend>Horario de atención</legend>
+        <p class="muted small">Ej.: <code>09:00-13:00, 15:00-19:00</code>. Vacío = no trabaja ese día.</p>
+        <div id="barbero-horario" class="horario-form"></div>
+      </fieldset>
+      <label class="check"><input type="checkbox" name="activo" checked> Activo (recibe citas)</label>
+      <p class="msg" id="barbero-msg" role="status"></p>
+      <div class="acciones">
+        <button type="button" class="btn danger" id="barbero-borrar">Borrar</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn primary" value="ok">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-servicio">
+    <form method="dialog" id="form-servicio">
+      <h2>Servicio</h2>
+      <label>Nombre <input name="nombre" required placeholder="Ej.: Corte + barba"></label>
+      <div class="row2">
+        <label>Duración (minutos) <input type="number" name="duracion_min" min="5" max="480" step="5" required></label>
+        <label>Precio <input type="number" name="precio" min="0" step="0.01" inputmode="decimal"></label>
+      </div>
+      <label class="check"><input type="checkbox" name="activo" checked> Se puede reservar</label>
+      <p class="msg" id="servicio-msg" role="status"></p>
+      <div class="acciones">
+        <button type="button" class="btn danger" id="servicio-borrar">Borrar</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn primary" value="ok">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-reserva">
+    <form method="dialog" id="form-reserva">
+      <h2>Confirmar cita</h2>
+      <div id="reserva-resumen" class="resumen"></div>
+      <label>Nota para la barbería (opcional) <input name="nota" maxlength="200" placeholder="Ej.: degradado bajo"></label>
+      <p class="msg" id="reserva-msg" role="status"></p>
+      <div class="acciones">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-cerrar>Volver</button>
+        <button type="submit" class="btn primary" value="ok">Reservar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-cita">
+    <form method="dialog" id="form-cita">
+      <h2>Nueva cita</h2>
+      <label>Cliente <select name="cliente"></select></label>
+      <label id="cita-nombre-row">Nombre del cliente <input name="cliente_nombre" placeholder="Ej.: Mario (llamó por teléfono)"></label>
+      <div class="row2">
+        <label>Servicio <select name="servicio_id" required></select></label>
+        <label>Barbero <select name="barbero_id" required></select></label>
+      </div>
+      <div class="row2">
+        <label>Fecha <input type="date" name="fecha" required></label>
+        <label>Hora <select name="hora" required></select></label>
+      </div>
+      <label>Nota <input name="nota" maxlength="200"></label>
+      <p class="msg" id="cita-msg" role="status"></p>
+      <div class="acciones">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn primary" value="ok">Agendar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-espera">
+    <form method="dialog" id="form-espera">
+      <h2>🔔 Lista de espera</h2>
+      <p id="espera-txt"></p>
+      <label>Con <select name="barbero_id"></select></label>
+      <div class="row2">
+        <label>Me sirve desde <input type="time" name="desde"></label>
+        <label>hasta <input type="time" name="hasta"></label>
+      </div>
+      <p class="muted small">Si alguien cancela en ese horario te avisamos al instante. Avisamos a todos los de la lista
+        en orden de llegada: el primero que reserva se queda con el lugar.</p>
+      <p class="msg" id="espera-msg" role="status"></p>
+      <div class="acciones">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-cerrar>Cancelar</button>
+        <button type="submit" class="btn primary" value="ok">Avisarme</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-motivo">
+    <form method="dialog" id="form-motivo">
+      <h2 id="motivo-titulo"></h2>
+      <p id="motivo-txt"></p>
+      <label id="motivo-row"><span id="motivo-etiqueta">Motivo</span> <textarea name="motivo" rows="3"></textarea></label>
+      <p class="msg" id="motivo-msg" role="status"></p>
+      <div class="acciones">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-cerrar>Volver</button>
+        <button type="submit" class="btn primary" value="ok" id="motivo-ok">Confirmar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="js/config.js"></script>
+  <script>
+    // La librería de Supabase sólo hace falta cuando hay proyecto configurado.
+    if (window.BARBERIA_CONFIG.SUPABASE_URL) {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"><\/script>');
+    }
+  </script>
+  <script src="js/agenda.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
