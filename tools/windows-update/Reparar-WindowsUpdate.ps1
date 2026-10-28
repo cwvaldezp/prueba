@@ -92,6 +92,20 @@ function Obtener-PoliticasWU {
     return $p
 }
 
+# Devuelve las GPO (de dominio o "Local Group Policy") que configuran Windows Update, según gpresult
+function Obtener-OrigenGpoWU {
+    $xmlRuta = Join-Path $CarpetaLog "${Servidor}_rsop_$Marca.xml"
+    & gpresult.exe /scope computer /x $xmlRuta /f 2>&1 | Out-Null
+    if (-not (Test-Path $xmlRuta)) { return @() }
+    try { [xml]$rsop = Get-Content $xmlRuta -Raw } catch { return @() }
+    $nombreGpo = { param($g) if ($g.Name -is [string]) { $g.Name } else { $g.Name.InnerText } }
+    $ext = $rsop.Rsop.ComputerResults.ExtensionData.Extension
+    $ext.Policy | Where-Object { $_ -and $_.Category -match 'Windows Update' } |
+        ForEach-Object { [pscustomobject]@{ Ajuste = $_.Name; GPO = (& $nombreGpo $_.GPO) } }
+    $ext.RegistrySetting | Where-Object { $_ -and $_.KeyPath -match 'WindowsUpdate' } |
+        ForEach-Object { [pscustomobject]@{ Ajuste = "$($_.KeyPath)\$($_.AdmSetting)"; GPO = (& $nombreGpo $_.GPO) } }
+}
+
 function Obtener-ProgramasInstalados([string]$Patron) {
     Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
                      'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
@@ -219,7 +233,7 @@ if ($SoloDiagnostico) {
 }
 
 Write-Host ''
-if (-not (Confirmar "¿Continuar con la reparación de $Servidor? (se pedirá confirmación en cada paso)")) {
+if (-not (Confirmar "¿Continuar con la reparación de ${Servidor}? (se pedirá confirmación en cada paso)")) {
     Escribir-Info 'Cancelado por el usuario. No se hizo ningún cambio.'
     Stop-Transcript | Out-Null
     exit 0
@@ -292,9 +306,17 @@ if ($politicas.Count -eq 0) {
 
             if (Confirmar '¿Ejecutar gpupdate para comprobar si una GPO de dominio las vuelve a aplicar?') {
                 & gpupdate.exe /target:computer /force | Out-Null
-                if ((Obtener-PoliticasWU).Count -gt 0) {
-                    Escribir-Error 'Las políticas VOLVIERON después de gpupdate: las aplica una GPO de dominio.'
-                    Escribir-Info  'Hay que corregir la GPO en Active Directory (revisa: gpresult /h C:\gpresult.html).'
+                $devueltas = Obtener-PoliticasWU
+                if ($devueltas.Count -gt 0) {
+                    Escribir-Error 'Algunas políticas VOLVIERON después de gpupdate:'
+                    $devueltas.GetEnumerator() | ForEach-Object { Escribir-Info ("{0,-55} = {1}" -f $_.Key, $_.Value) }
+                    $origen = @(Obtener-OrigenGpoWU)
+                    if ($origen.Count -gt 0) {
+                        Escribir-Info 'Las aplica esta GPO ("Local Group Policy" = política local del servidor):'
+                        $origen | ForEach-Object { Escribir-Info ("  {0}  <-  {1}" -f $_.GPO, $_.Ajuste) }
+                    } else {
+                        Escribir-Info 'No se pudo identificar la GPO. Revisa: gpresult /scope computer /h C:\Temp\gpresult.html'
+                    }
                     $Resumen['Paso 2 - Políticas'] = 'Borradas, pero una GPO las reaplica'
                 } else {
                     Escribir-Ok 'Las políticas no volvieron después de gpupdate.'
