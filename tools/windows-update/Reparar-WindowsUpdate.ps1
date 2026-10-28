@@ -98,7 +98,12 @@ function Obtener-OrigenGpoWU {
     & gpresult.exe /scope computer /x $xmlRuta /f 2>&1 | Out-Null
     if (-not (Test-Path $xmlRuta)) { return @() }
     try { [xml]$rsop = Get-Content $xmlRuta -Raw } catch { return @() }
-    $nombreGpo = { param($g) if ($g.Name -is [string]) { $g.Name } else { $g.Name.InnerText } }
+    # Cada ajuste solo trae el identificador de su GPO; el nombre está en la lista de GPO aplicadas
+    $texto = { param($n) if ($n -is [string]) { $n } else { $n.InnerText } }
+    $gpos = @{}
+    $rsop.Rsop.ComputerResults.GPO | Where-Object { $_ } |
+        ForEach-Object { $gpos[(& $texto $_.Path.Identifier)] = (& $texto $_.Name) }
+    $nombreGpo = { param($g) $id = & $texto $g.Identifier; if ($gpos[$id]) { $gpos[$id] } else { $id } }
     $ext = $rsop.Rsop.ComputerResults.ExtensionData.Extension
     $ext.Policy | Where-Object { $_ -and $_.Category -match 'Windows Update' } |
         ForEach-Object { [pscustomobject]@{ Ajuste = $_.Name; GPO = (& $nombreGpo $_.GPO) } }
