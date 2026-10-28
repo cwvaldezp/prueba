@@ -307,8 +307,14 @@ if ($politicas.Count -eq 0) {
             if (Confirmar '¿Ejecutar gpupdate para comprobar si una GPO de dominio las vuelve a aplicar?') {
                 & gpupdate.exe /target:computer /force | Out-Null
                 $devueltas = Obtener-PoliticasWU
+                $bloquean = $devueltas.Keys | Where-Object { $_ -match 'WUServer|UseWUServer|DoNotConnectToWindowsUpdateInternetLocations' }
                 if ($devueltas.Count -gt 0) {
-                    Escribir-Error 'Algunas políticas VOLVIERON después de gpupdate:'
+                    if ($bloquean) {
+                        Escribir-Error 'Volvieron políticas que BLOQUEAN Windows Update (apuntan a un WSUS):'
+                    } else {
+                        Escribir-Aviso 'Volvieron políticas, pero NO bloquean Windows Update (solo desactivan las automáticas;'
+                        Escribir-Aviso 'la búsqueda manual desde la interfaz funciona):'
+                    }
                     $devueltas.GetEnumerator() | ForEach-Object { Escribir-Info ("{0,-55} = {1}" -f $_.Key, $_.Value) }
                     $origen = @(Obtener-OrigenGpoWU)
                     if ($origen.Count -gt 0) {
@@ -317,7 +323,7 @@ if ($politicas.Count -eq 0) {
                     } else {
                         Escribir-Info 'No se pudo identificar la GPO. Revisa: gpresult /scope computer /h C:\Temp\gpresult.html'
                     }
-                    $Resumen['Paso 2 - Políticas'] = 'Borradas, pero una GPO las reaplica'
+                    $Resumen['Paso 2 - Políticas'] = if ($bloquean) { 'Borradas, pero una GPO reaplica el WSUS' } else { 'Borradas (una GPO reaplica solo NoAutoUpdate)' }
                 } else {
                     Escribir-Ok 'Las políticas no volvieron después de gpupdate.'
                 }
