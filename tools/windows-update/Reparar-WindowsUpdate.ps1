@@ -108,7 +108,7 @@ function Obtener-OrigenGpoWU {
     $ext.Policy | Where-Object { $_ -and $_.Category -match 'Windows Update' } |
         ForEach-Object { [pscustomobject]@{ Ajuste = $_.Name; GPO = (& $nombreGpo $_.GPO) } }
     $ext.RegistrySetting | Where-Object { $_ -and $_.KeyPath -match 'WindowsUpdate' } |
-        ForEach-Object { [pscustomobject]@{ Ajuste = "$($_.KeyPath)\$($_.AdmSetting)"; GPO = (& $nombreGpo $_.GPO) } }
+        ForEach-Object { [pscustomobject]@{ Ajuste = "$($_.KeyPath)\$(& $texto $_.Value.Name)".TrimEnd('\'); GPO = (& $nombreGpo $_.GPO) } }
 }
 
 function Obtener-ProgramasInstalados([string]$Patron) {
@@ -321,10 +321,14 @@ if ($politicas.Count -eq 0) {
                         Escribir-Aviso 'la búsqueda manual desde la interfaz funciona):'
                     }
                     $devueltas.GetEnumerator() | ForEach-Object { Escribir-Info ("{0,-55} = {1}" -f $_.Key, $_.Value) }
-                    $origen = @(Obtener-OrigenGpoWU)
+                    # La misma GPO suele aparecer dos veces (como plantilla y como valor de registro)
+                    $origen = @(Obtener-OrigenGpoWU | Sort-Object GPO -Unique)
                     if ($origen.Count -gt 0) {
-                        Escribir-Info 'Las aplica esta GPO ("Local Group Policy" = política local del servidor):'
-                        $origen | ForEach-Object { Escribir-Info ("  {0}  <-  {1}" -f $_.GPO, $_.Ajuste) }
+                        Escribir-Info 'Las aplica esta GPO:'
+                        $origen | ForEach-Object {
+                            if ($_.GPO -eq 'Local Group Policy') { Escribir-Info "  $($_.GPO) (política local del servidor, no de dominio)" }
+                            else { Escribir-Info "  $($_.GPO)" }
+                        }
                     } else {
                         Escribir-Info 'No se pudo identificar la GPO. Revisa: gpresult /scope computer /h C:\Temp\gpresult.html'
                     }
