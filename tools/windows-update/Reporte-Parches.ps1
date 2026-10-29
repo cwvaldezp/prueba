@@ -21,12 +21,19 @@
 .PARAMETER OU
     OU de Active Directory donde buscar servidores cuando no se pasa -Servidores.
 
+.PARAMETER Credencial
+    Cuenta con la que conectarse a los servidores (por ejemplo USFQ\usuario).
+    Pide la contraseña al momento de ejecutar. Si se omite, usa la sesión actual.
+
 .PARAMETER SinBuscarPendientes
     No consulta a Microsoft las actualizaciones pendientes (más rápido; la
     búsqueda puede tardar varios minutos por servidor).
 
 .EXAMPLE
     .\Reporte-Parches.ps1 -Servidores P-WS-INT-01, P-WS-INT-02, P-WS-EXT-01, P-WS-EXT-02
+
+.EXAMPLE
+    .\Reporte-Parches.ps1 -Credencial USFQ\usuario-admin
 
 .EXAMPLE
     .\Reporte-Parches.ps1
@@ -38,6 +45,9 @@ param(
     [string]$Salida = 'C:\Temp\ReportesWU',
     [int]$DiasAtencion = 35,
     [int]$DiasCritico = 60,
+    [System.Management.Automation.PSCredential]
+    [System.Management.Automation.Credential()]
+    $Credencial = [System.Management.Automation.PSCredential]::Empty,
     [switch]$SinBuscarPendientes
 )
 
@@ -109,8 +119,13 @@ $recolectar = {
     [pscustomobject]$r
 }
 
+$conexion = @{ ComputerName = $Servidores }
+if ($Credencial -ne [System.Management.Automation.PSCredential]::Empty) {
+    $conexion.Credential = $Credencial
+    Write-Host "Conectando como $($Credencial.UserName)"
+}
 $errores = $null
-$datos = Invoke-Command -ComputerName $Servidores -ScriptBlock $recolectar -ArgumentList (-not $SinBuscarPendientes) `
+$datos = Invoke-Command @conexion -ScriptBlock $recolectar -ArgumentList (-not $SinBuscarPendientes) `
     -ErrorAction SilentlyContinue -ErrorVariable errores
 
 # ---------------------------------------------------------------- evaluación
