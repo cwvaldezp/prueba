@@ -1,4 +1,4 @@
-﻿﻿<#
+﻿<#
 .SYNOPSIS
     Reporte centralizado del estado de parches de los servidores Windows (solo lectura).
 
