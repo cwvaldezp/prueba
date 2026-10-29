@@ -6,8 +6,8 @@
     Se ejecuta desde un servidor de administración y consulta a los demás por
     PowerShell Remoting (WinRM), en paralelo. Por cada servidor obtiene:
       - Build, último parche instalado y hace cuántos días.
-      - Actualizaciones pendientes con su KB, clasificación, severidad de Microsoft
-        (MSRC), fecha de publicación y CVE que corrigen.
+      - Actualizaciones pendientes con su KB, clasificación, fecha de publicación y,
+        según el boletín del MSRC, severidad, CVE que corrigen y si están explotados.
       - Instalaciones fallidas de los últimos 30 días.
       - Si espera un reinicio y cuándo fue el último.
       - Si volvieron las políticas de WSUS, y si siguen SCCM o Endpoint Central.
@@ -32,6 +32,14 @@
     No consulta a Microsoft las actualizaciones pendientes (más rápido; la
     búsqueda puede tardar varios minutos por servidor).
 
+.PARAMETER SinMsrc
+    No consulta el boletín del Microsoft Security Response Center (MSRC) para
+    completar severidad, CVE y explotación activa de cada KB.
+
+.PARAMETER IncluirDefiniciones
+    Incluye las firmas de Microsoft Defender (por defecto se omiten: con
+    SentinelOne, Defender está detenido y no se actualiza).
+
 .EXAMPLE
     .\Reporte-Parches.ps1 -Servidores P-WS-INT-01, P-WS-INT-02, P-WS-EXT-01, P-WS-EXT-02
 
@@ -51,7 +59,9 @@ param(
     [System.Management.Automation.PSCredential]
     [System.Management.Automation.Credential()]
     $Credencial = [System.Management.Automation.PSCredential]::Empty,
-    [switch]$SinBuscarPendientes
+    [switch]$SinBuscarPendientes,
+    [switch]$SinMsrc,
+    [switch]$IncluirDefiniciones
 )
 
 $Marca = Get-Date -Format 'yyyyMMdd_HHmm'
@@ -62,6 +72,7 @@ $FinSoporte = @{
     '14393' = [datetime]'2027-01-12'   # Windows Server 2016
     '17763' = [datetime]'2029-01-09'   # Windows Server 2019
     '20348' = [datetime]'2031-10-14'   # Windows Server 2022
+    '26100' = [datetime]'2034-11-14'   # Windows Server 2025
 }
 
 # ---------------------------------------------------------------- servidores
@@ -180,15 +191,111 @@ $errores = $null
 $datos = Invoke-Command @conexion -ScriptBlock $recolectar -ArgumentList (-not $SinBuscarPendientes) `
     -ErrorAction SilentlyContinue -ErrorVariable errores
 
-# ---------------------------------------------------------------- evaluación
+# ---------------------------------------------------------------- utilidades
+
+# Nombres largos: 'H' es un alias de Get-History y tiene prioridad sobre una función
+function Codificar([object]$v) { [System.Net.WebUtility]::HtmlEncode([string]$v) }
+function FormatoFecha([object]$v, [string]$Formato = 'dd/MM/yyyy HH:mm') {
+    if ($v -is [datetime]) { $v.ToString($Formato) } else { [string]$v }
+}
+function SiNo([object]$v) { if ($v -eq $true) { 'Sí' } elseif ($v -eq $false) { 'No' } else { '' } }
+function Plural([int]$n, [string]$uno, [string]$varios) { if ($n -eq 1) { "$n $uno" } else { "$n $varios" } }
+function RangoSeveridad([string]$s) {
+    switch ($s) { 'Critical' { 0 } 'Important' { 1 } 'Moderate' { 2 } 'Low' { 3 } default { 9 } }
+}
+
+# Firmas de Defender: con SentinelOne como antivirus, Defender está detenido y estas
+# "pendientes" o "fallidas" son ruido; se excluyen salvo que se pida -IncluirDefiniciones.
+function EsDefinicion($u) {
+    $u.Clase -eq 'Definition Updates' -or $u.Titulo -match 'Security Intelligence Update|antimalware platform'
+}
+
+# Descarga del MSRC (api.msrc.microsoft.com, pública y sin clave) los boletines de los meses
+# indicados y devuelve, por KB: CVE que corrige, severidad máxima y CVE explotados activamente.
+function Obtener-DatosMsrc([string[]]$Meses) {
+    $mapa = @{}
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    foreach ($mes in $Meses) {
+        Write-Host "Consultando boletín de seguridad de Microsoft $mes ..."
+        try {
+            $cvrf = Invoke-RestMethod "https://api.msrc.microsoft.com/cvrf/v3.0/cvrf/$mes" -Headers @{ Accept = 'application/json' } -UseBasicParsing -TimeoutSec 120
+        } catch {
+            Write-Host "  No se pudo consultar MSRC ($mes): $($_.Exception.Message)" -ForegroundColor Yellow
+            continue
+        }
+        foreach ($v in $cvrf.Vulnerability) {
+            $sev = $v.Threats | Where-Object { $_.Type -eq 3 } | ForEach-Object { $_.Description.Value } |
+                Sort-Object { RangoSeveridad $_ } | Select-Object -First 1
+            $explotada = [bool]($v.Threats | Where-Object { $_.Type -eq 1 -and $_.Description.Value -match 'Exploited:Yes' })
+            $kbs = $v.Remediations | Where-Object { $_.Type -eq 2 -and $_.Description.Value -match '^\d{6,7}$' } |
+                ForEach-Object { "KB$($_.Description.Value)" } | Sort-Object -Unique
+            foreach ($kb in $kbs) {
+                if (-not $mapa.ContainsKey($kb)) {
+                    $mapa[$kb] = [pscustomobject]@{
+                        CVE        = New-Object 'System.Collections.Generic.SortedSet[string]'
+                        Explotadas = New-Object 'System.Collections.Generic.SortedSet[string]'
+                        Severidad  = ''
+                    }
+                }
+                [void]$mapa[$kb].CVE.Add($v.CVE)
+                if ($explotada) { [void]$mapa[$kb].Explotadas.Add($v.CVE) }
+                if ((RangoSeveridad $sev) -lt (RangoSeveridad $mapa[$kb].Severidad)) { $mapa[$kb].Severidad = $sev }
+            }
+        }
+    }
+    $mapa
+}
+
+# ---------------------------------------------------------------- datos por servidor
 
 $hoy = Get-Date
-$kbPendientes = New-Object System.Collections.Generic.List[object]
+$kbPendientes  = New-Object System.Collections.Generic.List[object]
 $fallidasTodas = New-Object System.Collections.Generic.List[object]
+$porServidor   = @{}
+
+foreach ($nombre in $Servidores) {
+    $d = $datos | Where-Object { $_.PSComputerName -eq $nombre } | Select-Object -First 1
+    if (-not $d) { continue }
+    # En PowerShell 5.1 ConvertFrom-Json devuelve el arreglo como un solo objeto: se enumera con el pipeline
+    $pend = @((ConvertFrom-Json $d.PendientesJson) | ForEach-Object { $_ })
+    $fall = @((ConvertFrom-Json $d.FallidasJson) | ForEach-Object { $_ })
+    if (-not $IncluirDefiniciones) {
+        $pend = @($pend | Where-Object { -not (EsDefinicion $_) })
+        $fall = @($fall | Where-Object { -not (EsDefinicion $_) })
+    }
+    foreach ($p in $pend) {
+        $p | Add-Member -NotePropertyName Servidor -NotePropertyValue $nombre
+        $p | Add-Member -NotePropertyName Explotadas -NotePropertyValue ''
+        $kbPendientes.Add($p)
+    }
+    foreach ($x in $fall) { $x | Add-Member -NotePropertyName Servidor -NotePropertyValue $nombre; $fallidasTodas.Add($x) }
+    $porServidor[$nombre] = @{ Datos = $d; Pendientes = $pend; Fallidas = $fall }
+}
+
+# Severidad, CVE y explotación según el MSRC, para los meses en que se publicaron los pendientes
+$msrcConsultado = $false
+if (-not $SinMsrc -and $kbPendientes.Count) {
+    $ingles = [Globalization.CultureInfo]::InvariantCulture
+    $meses = $kbPendientes | Where-Object { $_.Publicado } |
+        ForEach-Object { ([datetime]::ParseExact($_.Publicado, 'yyyy-MM-dd', $ingles)).ToString('yyyy-MMM', $ingles) } |
+        Sort-Object -Unique
+    $msrc = Obtener-DatosMsrc $meses
+    $msrcConsultado = $msrc.Count -gt 0
+    foreach ($p in $kbPendientes) {
+        foreach ($kb in ($p.KB -split ',\s*')) {
+            $m = $msrc[$kb]
+            if (-not $m) { continue }
+            if ((RangoSeveridad $m.Severidad) -lt (RangoSeveridad $p.Severidad)) { $p.Severidad = $m.Severidad }
+            if (-not $p.CVE) { $p.CVE = @($m.CVE) -join ', ' }
+            $p.Explotadas = @($m.Explotadas) -join ', '
+        }
+    }
+}
+
+# ---------------------------------------------------------------- evaluación
 
 $filas = foreach ($nombre in $Servidores) {
-    $d = $datos | Where-Object { $_.PSComputerName -eq $nombre } | Select-Object -First 1
-    if (-not $d) {
+    if (-not $porServidor.ContainsKey($nombre)) {
         $err = $errores | Where-Object { "$($_.TargetObject) $($_.Exception.Message)" -match [regex]::Escape($nombre) } | Select-Object -First 1
         [pscustomobject]@{
             Servidor = $nombre; Estado = 'Sin respuesta'
@@ -196,53 +303,58 @@ $filas = foreach ($nombre in $Servidores) {
         }
         continue
     }
+    $d    = $porServidor[$nombre].Datos
+    $pend = $porServidor[$nombre].Pendientes
+    $fall = $porServidor[$nombre].Fallidas
 
-    # En PowerShell 5.1 ConvertFrom-Json devuelve el arreglo como un solo objeto: se enumera con el pipeline
-    $pend = @((ConvertFrom-Json $d.PendientesJson) | ForEach-Object { $_ })
-    foreach ($p in $pend) { $p | Add-Member -NotePropertyName Servidor -NotePropertyValue $nombre; $kbPendientes.Add($p) }
-    $fall = @((ConvertFrom-Json $d.FallidasJson) | ForEach-Object { $_ })
-    foreach ($x in $fall) { $x | Add-Member -NotePropertyName Servidor -NotePropertyValue $nombre; $fallidasTodas.Add($x) }
+    $dias       = if ($d.FechaUltimoParche) { [int]($hoy - $d.FechaUltimoParche).TotalDays } else { $null }
+    $diasEnc    = if ($d.UltimoInicio) { [int]($hoy - $d.UltimoInicio).TotalDays } else { $null }
+    $soporte    = $FinSoporte[$d.BuildMayor]
+    $seguridad  = @($pend | Where-Object { $_.Clase -eq 'Security Updates' -or (RangoSeveridad $_.Severidad) -le 1 })
+    $criticas   = @($pend | Where-Object { $_.Severidad -eq 'Critical' })
+    $explotadas = @($pend | ForEach-Object { $_.Explotadas -split ',\s*' } | Where-Object { $_ } | Sort-Object -Unique)
 
-    $dias      = if ($d.FechaUltimoParche) { [int]($hoy - $d.FechaUltimoParche).TotalDays } else { $null }
-    $diasEnc   = if ($d.UltimoInicio) { [int]($hoy - $d.UltimoInicio).TotalDays } else { $null }
-    $soporte   = $FinSoporte[$d.BuildMayor]
-    $criticas  = @($pend | Where-Object { $_.Severidad -eq 'Critical' })
-
-    $criticos = @(); $avisos = @()
-    if ($d.WUServer)                                 { $criticos += "Apunta a WSUS ($($d.WUServer))" }
-    if ($d.SentinelOne -ne 'Running')                { $criticos += "SentinelOne: $($d.SentinelOne)" }
-    if ($soporte -and $soporte -lt $hoy)             { $criticos += "Sistema sin soporte de Microsoft desde $($soporte.ToString('dd/MM/yyyy'))" }
-    if ($null -eq $dias)                             { $avisos   += 'Sin fecha de último parche' }
-    elseif ($dias -ge $DiasCritico)                  { $criticos += "Último parche hace $dias días" }
-    elseif ($dias -ge $DiasAtencion)                 { $avisos   += "Último parche hace $dias días" }
-    if ($criticas.Count)                             { $criticos += "$($criticas.Count) actualizaciones de severidad CRÍTICA pendientes" }
-    elseif ($d.PendientesSeguridad -gt 0)            { $avisos   += "$($d.PendientesSeguridad) actualizaciones de seguridad pendientes" }
-    elseif ($d.Pendientes -gt 0)                     { $avisos   += "$($d.Pendientes) actualizaciones pendientes" }
-    if ($fall.Count)                                 { $avisos   += "$($fall.Count) instalaciones fallidas en 30 días" }
-    if ($d.ReinicioPendiente)                        { $avisos   += 'Reinicio pendiente' }
-    elseif ($diasEnc -ge 90)                         { $avisos   += "Sin reiniciar hace $diasEnc días" }
-    if ($d.ClienteSCCM)                              { $avisos   += 'Cliente SCCM todavía instalado' }
-    if ($d.LibreC_GB -lt 10)                         { $avisos   += "Poco espacio en C: ($($d.LibreC_GB) GB)" }
-    if ($d.SMB1)                                     { $avisos   += 'SMBv1 habilitado' }
-    if ($d.FirewallApagado)                          { $avisos   += "Firewall apagado: $($d.FirewallApagado)" }
+    $criticos = @(); $avisos = @(); $config = @()
+    if ($d.WUServer)                      { $criticos += "Apunta a WSUS ($($d.WUServer))" }
+    if ($d.SentinelOne -ne 'Running')     { $criticos += "SentinelOne: $($d.SentinelOne)" }
+    if ($soporte -and $soporte -lt $hoy)  { $criticos += "Sistema sin soporte de Microsoft desde $($soporte.ToString('dd/MM/yyyy'))" }
+    if ($explotadas.Count)                { $criticos += "Falta el parche de $(Plural $explotadas.Count 'vulnerabilidad explotada' 'vulnerabilidades explotadas') activamente" }
+    if ($criticas.Count)                  { $criticos += "$(Plural $criticas.Count 'actualización CRÍTICA pendiente' 'actualizaciones CRÍTICAS pendientes')" }
+    elseif ($seguridad.Count)             { $avisos   += "$(Plural $seguridad.Count 'actualización de seguridad pendiente' 'actualizaciones de seguridad pendientes')" }
+    elseif ($pend.Count)                  { $avisos   += "$(Plural $pend.Count 'actualización pendiente' 'actualizaciones pendientes')" }
+    # Con reinicio pendiente, los parches "instalados" todavía no protegen
+    if ($d.ReinicioPendiente -and $diasEnc -ge 30) { $criticos += "Reinicio pendiente y $diasEnc días encendido: los parches instalados no están aplicados" }
+    elseif ($d.ReinicioPendiente)         { $avisos   += 'Reinicio pendiente' }
+    elseif ($diasEnc -ge 90)              { $avisos   += "Sin reiniciar hace $diasEnc días" }
+    if ($null -eq $dias)                  { $avisos   += 'Sin fecha de último parche' }
+    elseif ($dias -ge $DiasCritico)       { $criticos += "Último parche hace $dias días" }
+    elseif ($dias -ge $DiasAtencion)      { $avisos   += "Último parche hace $dias días" }
+    if ($fall.Count)                      { $avisos   += "$(Plural $fall.Count 'instalación fallida' 'instalaciones fallidas') en 30 días" }
+    if ($d.ClienteSCCM)                   { $avisos   += 'Cliente SCCM todavía instalado (ejecutar Reparar-WindowsUpdate.ps1)' }
+    if ($d.LibreC_GB -lt 10)              { $avisos   += "Poco espacio en C: ($($d.LibreC_GB) GB)" }
     if ($soporte -and $soporte -ge $hoy -and ($soporte - $hoy).TotalDays -le 365) {
         $avisos += "Fin de soporte el $($soporte.ToString('dd/MM/yyyy'))"
     }
-    if ($d.ErrorBusqueda)                            { $avisos   += "No se pudo buscar pendientes: $($d.ErrorBusqueda)" }
+    if ($d.ErrorBusqueda)                 { $avisos   += "No se pudo buscar pendientes: $($d.ErrorBusqueda)" }
+    # Hallazgos de configuración: se informan aparte y no cambian el estado de parches
+    if ($d.SMB1)                          { $config   += 'SMBv1 habilitado' }
+    if ($d.FirewallApagado)               { $config   += "Firewall apagado: $($d.FirewallApagado)" }
 
     [pscustomobject]@{
         Servidor            = $nombre
         Estado              = if ($criticos) { 'Crítico' } elseif ($avisos) { 'Atención' } else { 'OK' }
         Motivos             = ($criticos + $avisos) -join '; '
+        Configuracion       = $config -join '; '
         Sistema             = $d.Sistema
         Build               = $d.Build
         FinSoporte          = $soporte
         UltimoParche        = $d.UltimoParche
         FechaUltimoParche   = $d.FechaUltimoParche
         DiasSinParche       = $dias
-        Pendientes          = $d.Pendientes
-        PendientesSeguridad = $d.PendientesSeguridad
+        Pendientes          = if ($null -eq $d.Pendientes) { $null } else { $pend.Count }
+        PendientesSeguridad = $seguridad.Count
         PendientesCriticas  = $criticas.Count
+        CVEExplotados       = $explotadas -join ', '
         Fallidas30Dias      = $fall.Count
         ReinicioPendiente   = $d.ReinicioPendiente
         UltimoInicio        = $d.UltimoInicio
@@ -261,7 +373,6 @@ $orden = @{ 'Crítico' = 0; 'Sin respuesta' = 1; 'Atención' = 2; 'OK' = 3 }
 $filas = $filas | Sort-Object @{ e = { $orden[$_.Estado] } }, Servidor
 
 # KB pendientes agrupados: un KB, en qué servidores falta
-$ordenSev = @{ 'Critical' = 0; 'Important' = 1; 'Moderate' = 2; 'Low' = 3 }
 $kbAgrupados = $kbPendientes | Group-Object Titulo | ForEach-Object {
     $p = $_.Group[0]
     [pscustomobject]@{
@@ -271,9 +382,10 @@ $kbAgrupados = $kbPendientes | Group-Object Titulo | ForEach-Object {
         Severidad  = $p.Severidad
         Publicado  = $p.Publicado
         CVE        = $p.CVE
+        Explotadas = $p.Explotadas
         Servidores = @($_.Group | ForEach-Object Servidor | Sort-Object -Unique)
     }
-} | Sort-Object @{ e = { if ($ordenSev.ContainsKey($_.Severidad)) { $ordenSev[$_.Severidad] } else { 9 } } },
+} | Sort-Object @{ e = { if ($_.Explotadas) { 0 } else { 1 } } }, @{ e = { RangoSeveridad $_.Severidad } },
                 @{ e = { $_.Servidores.Count }; Descending = $true }, Publicado
 
 # ---------------------------------------------------------------- salida
@@ -284,18 +396,26 @@ $archivoCsv      = Join-Path $Salida "Reporte-Parches_$Marca.csv"
 $archivoCsvKb    = Join-Path $Salida "KB-Pendientes_$Marca.csv"
 $archivoCsvFallo = Join-Path $Salida "Instalaciones-Fallidas_$Marca.csv"
 
-$filas | Select-Object * | Export-Csv $archivoCsv -NoTypeInformation -Encoding UTF8 -Delimiter ';'
-$kbPendientes | Select-Object Servidor, KB, Titulo, Clase, Severidad, Publicado, CVE, Descargada |
+# Fechas en formato año-mes-día y Sí/No: Excel en español no confunde día y mes
+function ParaCsv {
+    process {
+        $o = [ordered]@{}
+        foreach ($prop in $_.PSObject.Properties) {
+            $v = $prop.Value
+            $o[$prop.Name] = if ($v -is [datetime]) { $v.ToString('yyyy-MM-dd HH:mm') } elseif ($v -is [bool]) { SiNo $v } else { $v }
+        }
+        [pscustomobject]$o
+    }
+}
+$filas | Select-Object Servidor, Estado, Motivos, Configuracion, Sistema, Build, FinSoporte, UltimoParche, FechaUltimoParche,
+    DiasSinParche, Pendientes, PendientesSeguridad, PendientesCriticas, CVEExplotados, Fallidas30Dias, ReinicioPendiente,
+    UltimoInicio, DiasEncendido, WSUS, ClienteSCCM, AgenteEPC, SentinelOne, SMB1, FirewallApagado, LibreC_GB |
+    ParaCsv | Export-Csv $archivoCsv -NoTypeInformation -Encoding UTF8 -Delimiter ';'
+$kbPendientes | Select-Object Servidor, KB, Titulo, Clase, Severidad, Publicado, CVE, Explotadas, Descargada | ParaCsv |
     Export-Csv $archivoCsvKb -NoTypeInformation -Encoding UTF8 -Delimiter ';'
 $fallidasTodas | Select-Object Servidor, Fecha, Titulo, Codigo |
     Export-Csv $archivoCsvFallo -NoTypeInformation -Encoding UTF8 -Delimiter ';'
 
-# Nombres largos: 'H' es un alias de Get-History y tiene prioridad sobre una función
-function Codificar([object]$v) { [System.Net.WebUtility]::HtmlEncode([string]$v) }
-function FormatoFecha([object]$v, [string]$Formato = 'dd/MM/yyyy HH:mm') {
-    if ($v -is [datetime]) { $v.ToString($Formato) } else { [string]$v }
-}
-function SiNo([object]$v) { if ($v -eq $true) { 'Sí' } elseif ($v -eq $false) { 'No' } else { '' } }
 function ClaseEstado([string]$e) {
     switch ($e) { 'Crítico' { 'critico' } 'Atención' { 'atencion' } 'OK' { 'ok' } default { 'sinresp' } }
 }
@@ -313,11 +433,13 @@ function EnlacesKB([string]$kbs) {
         "<a href='https://support.microsoft.com/help/$($_ -replace '^KB','')' target='_blank'>$(Codificar $_)</a>"
     }) -join ' '
 }
-function EnlacesCVE([string]$cves) {
+function EnlacesCVE([string]$cves, [string]$explotadas) {
     $lista = @(($cves -split ',\s*') | Where-Object { $_ })
     if (-not $lista.Count) { return '—' }
+    $exp = @(($explotadas -split ',\s*') | Where-Object { $_ })
     $enlaces = ($lista | ForEach-Object {
-        "<a href='https://msrc.microsoft.com/update-guide/vulnerability/$_' target='_blank'>$(Codificar $_)</a>"
+        $marca = if ($_ -in $exp) { " class='explotada' title='Explotada activamente'" } else { '' }
+        "<a href='https://msrc.microsoft.com/update-guide/vulnerability/$_' target='_blank'$marca>$(Codificar $_)</a>"
     }) -join ' '
     if ($lista.Count -le 3) { return $enlaces }
     "<details><summary>$($lista.Count) CVE</summary>$enlaces</details>"
@@ -333,35 +455,44 @@ $tarjetas = foreach ($e in 'Crítico', 'Atención', 'OK', 'Sin respuesta') {
 $filasHtml = foreach ($f in $filas) {
     $clase = ClaseEstado $f.Estado
     if ($f.Estado -eq 'Sin respuesta') {
-        "<tr><td>$(Codificar $f.Servidor)</td><td><span class='estado $clase'>$(Codificar $f.Estado)</span></td><td colspan='8'>$(Codificar $f.Motivos)</td></tr>"
+        "<tr><td>$(Codificar $f.Servidor)</td><td><span class='estado $clase'>$(Codificar $f.Estado)</span></td><td colspan='9'>$(Codificar $f.Motivos)</td></tr>"
         continue
     }
     $pend = if ($null -eq $f.Pendientes) { '—' } else {
         "$($f.Pendientes)<br><small>$($f.PendientesSeguridad) de seguridad$(if ($f.PendientesCriticas) { ", $($f.PendientesCriticas) críticas" })</small>"
     }
-    $parche = "$(Codificar $f.UltimoParche)<br><small>$(FormatoFecha $f.FechaUltimoParche 'dd/MM/yyyy')$(if ($null -ne $f.DiasSinParche) { " · hace $($f.DiasSinParche) días" })</small>"
-    $inicio = "$(FormatoFecha $f.UltimoInicio 'dd/MM/yyyy')<br><small>hace $($f.DiasEncendido) días$(if ($f.ReinicioPendiente) { ' · <b>reinicio pendiente</b>' })</small>"
+    $parche = "$(Codificar $f.UltimoParche)<br><small>$(FormatoFecha $f.FechaUltimoParche 'dd/MM/yyyy')$(if ($null -ne $f.DiasSinParche) { " · hace $(Plural $f.DiasSinParche 'día' 'días')" })</small>"
+    $inicio = "$(FormatoFecha $f.UltimoInicio 'dd/MM/yyyy')<br><small>hace $(Plural $f.DiasEncendido 'día' 'días')$(if ($f.ReinicioPendiente) { ' · <b>reinicio pendiente</b>' })</small>"
+    $soporte = if ($f.FinSoporte) { FormatoFecha $f.FinSoporte 'dd/MM/yyyy' } else { '—' }
+    $motivos = if ($f.Motivos) { Codificar $f.Motivos } else { '—' }
+    $config  = if ($f.Configuracion) { Codificar $f.Configuracion } else { '—' }
     @"
-<tr><td>$(Codificar $f.Servidor)</td><td><span class='estado $clase'>$(Codificar $f.Estado)</span></td><td>$(Codificar $f.Motivos)</td>
-<td>$(Codificar $f.Build)<br><small>Soporte hasta $(if ($f.FinSoporte) { FormatoFecha $f.FinSoporte 'dd/MM/yyyy' } else { '—' })</small></td><td>$parche</td><td>$pend</td><td>$($f.Fallidas30Dias)</td><td>$inicio</td>
-<td>$(Codificar $f.SentinelOne)</td><td>$(Codificar $f.LibreC_GB) GB</td></tr>
+<tr><td>$(Codificar $f.Servidor)<br><small>$(Codificar $f.Sistema)</small></td><td><span class='estado $clase'>$(Codificar $f.Estado)</span></td><td>$motivos</td>
+<td>$(Codificar $f.Build)<br><small>Soporte hasta $soporte</small></td><td>$parche</td><td>$pend</td><td>$($f.Fallidas30Dias)</td><td>$inicio</td>
+<td>$(Codificar $f.SentinelOne)</td><td>$(Codificar $f.LibreC_GB) GB</td><td>$config</td></tr>
 "@
 }
 
 # Tabla 2: KB pendientes
 $filasKb = foreach ($k in $kbAgrupados) {
     $servs = ($k.Servidores | ForEach-Object { Codificar $_ }) -join '<br>'
+    $exp = if ($k.Explotadas) { "<span class='estado critico'>Sí</span><br><small>$(Codificar $k.Explotadas)</small>" } else { 'No' }
     @"
 <tr><td>$(EnlacesKB $k.KB)</td><td>$(Codificar $k.Titulo)</td><td>$(Codificar $k.Clase)</td><td>$(Severidad $k.Severidad)</td>
-<td>$(Codificar $k.Publicado)</td><td>$(EnlacesCVE $k.CVE)</td><td><b>$($k.Servidores.Count)</b><br><small>$servs</small></td></tr>
+<td>$(Codificar $k.Publicado)</td><td>$(EnlacesCVE $k.CVE $k.Explotadas)</td><td>$exp</td><td><b>$($k.Servidores.Count)</b><br><small>$servs</small></td></tr>
 "@
 }
+$notaMsrc = if ($SinMsrc) { 'No se consultó el MSRC (se usó -SinMsrc).' }
+            elseif ($msrcConsultado) { 'Severidad, CVE y explotación activa según el boletín mensual del Microsoft Security Response Center (MSRC).' }
+            elseif ($kbPendientes.Count) { 'No se pudo consultar el MSRC: la severidad y los CVE pueden faltar.' }
+            else { '' }
+$notaDef = if ($IncluirDefiniciones) { '' } else { ' No se incluyen las firmas de Microsoft Defender (usar -IncluirDefiniciones para verlas).' }
 $seccionKb = if ($SinBuscarPendientes) {
     "<p class='sub'>No se buscaron actualizaciones pendientes (se usó -SinBuscarPendientes).</p>"
 } elseif (-not $kbAgrupados) {
-    "<p class='sub'>Ningún servidor tiene actualizaciones pendientes.</p>"
+    "<p class='sub'>Ningún servidor tiene actualizaciones pendientes.$notaDef</p>"
 } else {
-    "<table><thead><tr><th>KB</th><th>Actualización</th><th>Clasificación</th><th>Severidad MSRC</th><th>Publicada</th><th>CVE que corrige</th><th>Servidores donde falta</th></tr></thead><tbody>$($filasKb -join "`n")</tbody></table>"
+    "<p class='sub'>$notaMsrc$notaDef</p><table><thead><tr><th>KB</th><th>Actualización</th><th>Clasificación</th><th>Severidad</th><th>Publicada</th><th>CVE que corrige</th><th>Explotada activamente</th><th>Servidores donde falta</th></tr></thead><tbody>$($filasKb -join "`n")</tbody></table>"
 }
 
 # Tabla 3: instalaciones fallidas
@@ -383,7 +514,7 @@ $html = @"
  .tarjetas{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
  .tarjeta{border-radius:8px;padding:10px 16px;min-width:110px} .tarjeta b{font-size:24px;display:block} .tarjeta span{font-size:13px}
  table{border-collapse:collapse;width:100%;font-size:13px} th,td{border-bottom:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:top}
- th{background:#f3f3f3;position:sticky;top:0} small{color:#666} a{color:#0b5cad}
+ th{background:#f3f3f3;position:sticky;top:0} small{color:#666} a{color:#0b5cad} a.explotada{color:#a4161a;font-weight:700}
  .estado{border-radius:4px;padding:2px 8px;font-weight:600;white-space:nowrap}
  .critico{background:#fde2e1;color:#a4161a} .atencion{background:#fff3cd;color:#7a5a00} .ok{background:#dcf5e3;color:#1b6b34} .sinresp{background:#e7e7e7;color:#444}
  details summary{cursor:pointer;color:#0b5cad}
@@ -393,13 +524,13 @@ $html = @"
 <div class="tarjetas">$($tarjetas -join '')</div>
 
 <h2>Servidores</h2>
-<table><thead><tr><th>Servidor</th><th>Estado</th><th>Motivos</th><th>Build</th><th>Último parche</th><th>Pendientes</th><th>Fallidas (30 d)</th><th>Último inicio</th><th>SentinelOne</th><th>Libre C:</th></tr></thead>
+<p class="sub">"Configuración" muestra hallazgos de seguridad que no dependen de parches; no cambian el estado.</p>
+<table><thead><tr><th>Servidor</th><th>Estado</th><th>Motivos</th><th>Build</th><th>Último parche</th><th>Pendientes</th><th>Fallidas (30 d)</th><th>Último inicio</th><th>SentinelOne</th><th>Libre C:</th><th>Configuración</th></tr></thead>
 <tbody>
 $($filasHtml -join "`n")
 </tbody></table>
 
 <h2>Actualizaciones pendientes por KB</h2>
-<p class="sub">Severidad según el Microsoft Security Response Center (MSRC). Cada KB y CVE enlaza a su página en Microsoft.</p>
 $seccionKb
 
 <h2>Instalaciones fallidas (últimos 30 días)</h2>
@@ -413,7 +544,8 @@ $html | Out-File $archivoHtml -Encoding UTF8
 $filas | Format-Table Servidor, Estado, Build, DiasSinParche, Pendientes, PendientesCriticas, ReinicioPendiente, Motivos -AutoSize -Wrap
 if ($kbAgrupados) {
     Write-Host 'KB pendientes:' -ForegroundColor Cyan
-    $kbAgrupados | Format-Table KB, Severidad, Publicado, @{ n = 'Servidores'; e = { $_.Servidores.Count } }, Titulo -AutoSize -Wrap
+    $kbAgrupados | Format-Table KB, Severidad, @{ n = 'Explotada'; e = { if ($_.Explotadas) { 'SÍ' } else { '' } } }, Publicado,
+        @{ n = 'Servidores'; e = { $_.Servidores.Count } }, Titulo -AutoSize -Wrap
 }
 Write-Host "Reporte HTML  : $archivoHtml" -ForegroundColor Green
 Write-Host "CSV servidores: $archivoCsv" -ForegroundColor Green
