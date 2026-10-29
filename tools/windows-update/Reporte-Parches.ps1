@@ -173,8 +173,9 @@ $archivoHtml = Join-Path $Salida "Reporte-Parches_$Marca.html"
 
 $filas | Select-Object * | Export-Csv $archivoCsv -NoTypeInformation -Encoding UTF8 -Delimiter ';'
 
-function H([object]$v) { [System.Net.WebUtility]::HtmlEncode([string]$v) }
-function F([object]$v) { if ($v -is [datetime]) { $v.ToString('dd/MM/yyyy HH:mm') } else { [string]$v } }
+# Nombres largos: 'H' es un alias de Get-History y tiene prioridad sobre una función
+function Codificar([object]$v) { [System.Net.WebUtility]::HtmlEncode([string]$v) }
+function FormatoFecha([object]$v) { if ($v -is [datetime]) { $v.ToString('dd/MM/yyyy HH:mm') } else { [string]$v } }
 function SiNo([object]$v) { if ($v -eq $true) { 'Sí' } elseif ($v -eq $false) { 'No' } else { '' } }
 
 $conteo = $filas | Group-Object Estado -AsHashTable -AsString
@@ -187,19 +188,19 @@ $tarjetas = foreach ($e in 'Crítico', 'Atención', 'OK', 'Sin respuesta') {
 $filasHtml = foreach ($f in $filas) {
     $clase = switch ($f.Estado) { 'Crítico' { 'critico' } 'Atención' { 'atencion' } 'OK' { 'ok' } default { 'sinresp' } }
     if ($f.Estado -eq 'Sin respuesta') {
-        "<tr><td>$(H $f.Servidor)</td><td><span class='estado $clase'>$(H $f.Estado)</span></td><td colspan='9'>$(H $f.Motivos)</td></tr>"
+        "<tr><td>$(Codificar $f.Servidor)</td><td><span class='estado $clase'>$(Codificar $f.Estado)</span></td><td colspan='9'>$(Codificar $f.Motivos)</td></tr>"
         continue
     }
     $pend = if ($null -eq $f.Pendientes) { '—' } else { "$($f.Pendientes) ($($f.PendientesSeguridad) seg.)" }
     if ($f.ListaPendientes) {
-        $items = ($f.ListaPendientes -split '; ' | ForEach-Object { "<li>$(H $_)</li>" }) -join ''
+        $items = ($f.ListaPendientes -split '; ' | ForEach-Object { "<li>$(Codificar $_)</li>" }) -join ''
         $pend = "<details><summary>$pend</summary><ul>$items</ul></details>"
     }
-    $parche = "$(H $f.UltimoParche)<br><small>$(F $f.FechaUltimoParche)$(if ($null -ne $f.DiasSinParche) { " · hace $($f.DiasSinParche) días" })</small>"
+    $parche = "$(Codificar $f.UltimoParche)<br><small>$(FormatoFecha $f.FechaUltimoParche)$(if ($null -ne $f.DiasSinParche) { " · hace $($f.DiasSinParche) días" })</small>"
     @"
-<tr><td>$(H $f.Servidor)</td><td><span class='estado $clase'>$(H $f.Estado)</span></td><td>$(H $f.Motivos)</td>
-<td>$(H $f.Build)</td><td>$parche</td><td>$pend</td><td>$(SiNo $f.ReinicioPendiente)</td><td>$(H (F $f.UltimoInicio))</td>
-<td>$(H $f.WSUS)</td><td>$(H $f.SentinelOne)</td><td>$(H $f.LibreC_GB) GB</td></tr>
+<tr><td>$(Codificar $f.Servidor)</td><td><span class='estado $clase'>$(Codificar $f.Estado)</span></td><td>$(Codificar $f.Motivos)</td>
+<td>$(Codificar $f.Build)</td><td>$parche</td><td>$pend</td><td>$(SiNo $f.ReinicioPendiente)</td><td>$(Codificar (FormatoFecha $f.UltimoInicio))</td>
+<td>$(Codificar $f.WSUS)</td><td>$(Codificar $f.SentinelOne)</td><td>$(Codificar $f.LibreC_GB) GB</td></tr>
 "@
 }
 
