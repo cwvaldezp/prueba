@@ -315,36 +315,91 @@ $filas = foreach ($nombre in $Servidores) {
     $explotadas = @($pend | ForEach-Object { $_.Explotadas -split ',\s*' } | Where-Object { $_ } | Sort-Object -Unique)
 
     $criticos = @(); $avisos = @(); $config = @()
-    if ($d.WUServer)                      { $criticos += "Apunta a WSUS ($($d.WUServer))" }
-    if ($d.SentinelOne -ne 'Running')     { $criticos += "SentinelOne: $($d.SentinelOne)" }
-    if ($soporte -and $soporte -lt $hoy)  { $criticos += "Sistema sin soporte de Microsoft desde $($soporte.ToString('dd/MM/yyyy'))" }
-    if ($explotadas.Count)                { $criticos += "Falta el parche de $(Plural $explotadas.Count 'vulnerabilidad explotada' 'vulnerabilidades explotadas') activamente" }
-    if ($criticas.Count)                  { $criticos += "$(Plural $criticas.Count 'actualización CRÍTICA pendiente' 'actualizaciones CRÍTICAS pendientes')" }
-    elseif ($seguridad.Count)             { $avisos   += "$(Plural $seguridad.Count 'actualización de seguridad pendiente' 'actualizaciones de seguridad pendientes')" }
-    elseif ($pend.Count)                  { $avisos   += "$(Plural $pend.Count 'actualización pendiente' 'actualizaciones pendientes')" }
+    # Qué hacer: cada hallazgo suma una recomendación con prioridad (1 = primero)
+    $acciones = New-Object System.Collections.Generic.List[object]
+    $hacer = { param([int]$Prioridad, [string]$Texto) $acciones.Add([pscustomobject]@{ P = $Prioridad; T = $Texto }) }
+
+    if ($d.WUServer) {
+        $criticos += "Apunta a WSUS ($($d.WUServer))"
+        & $hacer 1 'Ejecutar Reparar-WindowsUpdate.ps1 en el servidor para quitar las políticas de WSUS. Si vuelven, revisar la GPO con gpresult.'
+    }
+    if ($d.SentinelOne -ne 'Running') {
+        $criticos += "SentinelOne: $($d.SentinelOne)"
+        & $hacer 1 'Avisar a Seguridad: iniciar el servicio SentinelAgent o reinstalar el agente desde la consola de SentinelOne.'
+    }
+    if ($soporte -and $soporte -lt $hoy) {
+        $criticos += "Sistema sin soporte de Microsoft desde $($soporte.ToString('dd/MM/yyyy'))"
+        & $hacer 3 'Planificar la migración a una versión con soporte (Windows Server 2022 o 2025): ya no recibe parches de seguridad.'
+    }
+    if ($explotadas.Count) {
+        $criticos += "Falta el parche de $(Plural $explotadas.Count 'vulnerabilidad explotada' 'vulnerabilidades explotadas') activamente"
+        & $hacer 1 'Instalar YA los KB marcados como "Explotada activamente" (ver tabla de KB) y reiniciar, sin esperar la ventana mensual.'
+    }
+    if ($criticas.Count) {
+        $criticos += "$(Plural $criticas.Count 'actualización CRÍTICA pendiente' 'actualizaciones CRÍTICAS pendientes')"
+        & $hacer 2 'Instalar las actualizaciones críticas desde Settings > Windows Update y reiniciar en la próxima ventana de mantenimiento.'
+    } elseif ($seguridad.Count) {
+        $avisos += "$(Plural $seguridad.Count 'actualización de seguridad pendiente' 'actualizaciones de seguridad pendientes')"
+        & $hacer 3 'Instalar las actualizaciones de seguridad desde Settings > Windows Update en la próxima ventana de mantenimiento.'
+    } elseif ($pend.Count) {
+        $avisos += "$(Plural $pend.Count 'actualización pendiente' 'actualizaciones pendientes')"
+        & $hacer 5 'Instalar las actualizaciones pendientes cuando haya ventana (no son de seguridad).'
+    }
     # Con reinicio pendiente, los parches "instalados" todavía no protegen
-    if ($d.ReinicioPendiente -and $diasEnc -ge 30) { $criticos += "Reinicio pendiente y $diasEnc días encendido: los parches instalados no están aplicados" }
-    elseif ($d.ReinicioPendiente)         { $avisos   += 'Reinicio pendiente' }
-    elseif ($diasEnc -ge 90)              { $avisos   += "Sin reiniciar hace $diasEnc días" }
-    if ($null -eq $dias)                  { $avisos   += 'Sin fecha de último parche' }
-    elseif ($dias -ge $DiasCritico)       { $criticos += "Último parche hace $dias días" }
-    elseif ($dias -ge $DiasAtencion)      { $avisos   += "Último parche hace $dias días" }
-    if ($fall.Count)                      { $avisos   += "$(Plural $fall.Count 'instalación fallida' 'instalaciones fallidas') en 30 días" }
-    if ($d.ClienteSCCM)                   { $avisos   += 'Cliente SCCM todavía instalado (ejecutar Reparar-WindowsUpdate.ps1)' }
-    if ($d.LibreC_GB -lt 10)              { $avisos   += "Poco espacio en C: ($($d.LibreC_GB) GB)" }
+    if ($d.ReinicioPendiente -and $diasEnc -ge 30) {
+        $criticos += "Reinicio pendiente y $diasEnc días encendido: los parches instalados no están aplicados"
+        & $hacer 2 'Reiniciar en la próxima ventana de mantenimiento (coordinar con el responsable del servicio) y comprobar que el build cambió.'
+    } elseif ($d.ReinicioPendiente) {
+        $avisos += 'Reinicio pendiente'
+        & $hacer 3 'Reiniciar en la próxima ventana de mantenimiento para terminar de aplicar los parches.'
+    } elseif ($diasEnc -ge 90) {
+        $avisos += "Sin reiniciar hace $diasEnc días"
+        & $hacer 4 'Programar un reinicio de mantenimiento.'
+    }
+    if ($null -eq $dias) {
+        $avisos += 'Sin fecha de último parche'
+        & $hacer 4 'Revisar el historial con Get-HotFix y buscar actualizaciones desde Settings > Windows Update.'
+    } elseif ($dias -ge $DiasAtencion) {
+        if ($dias -ge $DiasCritico) { $criticos += "Último parche hace $dias días" } else { $avisos += "Último parche hace $dias días" }
+        & $hacer 2 'Buscar e instalar actualizaciones desde Settings > Windows Update. Si no encuentra nada, ejecutar Reparar-WindowsUpdate.ps1 -SoloDiagnostico.'
+    }
+    if ($fall.Count) {
+        $avisos += "$(Plural $fall.Count 'instalación fallida' 'instalaciones fallidas') en 30 días"
+        & $hacer 3 'Revisar el código de error en "Instalaciones fallidas" y reintentar. Si vuelve a fallar, reiniciar la caché con Reparar-WindowsUpdate.ps1 (paso 3).'
+    }
+    if ($d.ClienteSCCM) {
+        $avisos += 'Cliente SCCM todavía instalado'
+        & $hacer 1 'Ejecutar Reparar-WindowsUpdate.ps1 en el servidor para desinstalar el cliente SCCM (antes de instalar parches).'
+    }
+    if ($d.LibreC_GB -lt 10) {
+        $avisos += "Poco espacio en C: ($($d.LibreC_GB) GB)"
+        & $hacer 2 'Liberar espacio en C: borrar C:\Windows\SoftwareDistribution.old_* y temporales, y ejecutar Dism /Online /Cleanup-Image /StartComponentCleanup.'
+    }
     if ($soporte -and $soporte -ge $hoy -and ($soporte - $hoy).TotalDays -le 365) {
         $avisos += "Fin de soporte el $($soporte.ToString('dd/MM/yyyy'))"
+        & $hacer 4 'Planificar la migración antes del fin de soporte.'
     }
-    if ($d.ErrorBusqueda)                 { $avisos   += "No se pudo buscar pendientes: $($d.ErrorBusqueda)" }
+    if ($d.ErrorBusqueda) {
+        $avisos += "No se pudo buscar pendientes: $($d.ErrorBusqueda)"
+        & $hacer 2 'Ejecutar Reparar-WindowsUpdate.ps1 -SoloDiagnostico en el servidor para revisar políticas y conexión a Microsoft.'
+    }
     # Hallazgos de configuración: se informan aparte y no cambian el estado de parches
-    if ($d.SMB1)                          { $config   += 'SMBv1 habilitado' }
-    if ($d.FirewallApagado)               { $config   += "Firewall apagado: $($d.FirewallApagado)" }
+    if ($d.SMB1) {
+        $config += 'SMBv1 habilitado'
+        & $hacer 6 'SMBv1: confirmar con los responsables de las aplicaciones que nadie lo usa y deshabilitarlo con Set-SmbServerConfiguration -EnableSMB1Protocol $false (probar antes).'
+    }
+    if ($d.FirewallApagado) {
+        $config += "Firewall apagado: $($d.FirewallApagado)"
+        & $hacer 6 "Firewall: revisar las reglas y activar el perfil con Set-NetFirewallProfile -Profile $($d.FirewallApagado -replace ' ', '') -Enabled True."
+    }
+    $recomendaciones = @($acciones | Sort-Object P | ForEach-Object T | Select-Object -Unique)
 
     [pscustomobject]@{
         Servidor            = $nombre
         Estado              = if ($criticos) { 'Crítico' } elseif ($avisos) { 'Atención' } else { 'OK' }
         Motivos             = ($criticos + $avisos) -join '; '
         Configuracion       = $config -join '; '
+        Recomendaciones     = $recomendaciones
         Sistema             = $d.Sistema
         Build               = $d.Build
         FinSoporte          = $soporte
@@ -407,7 +462,7 @@ function ParaCsv {
         [pscustomobject]$o
     }
 }
-$filas | Select-Object Servidor, Estado, Motivos, Configuracion, Sistema, Build, FinSoporte, UltimoParche, FechaUltimoParche,
+$filas | Select-Object Servidor, Estado, Motivos, @{ n = 'Recomendaciones'; e = { $_.Recomendaciones -join ' | ' } }, Configuracion, Sistema, Build, FinSoporte, UltimoParche, FechaUltimoParche,
     DiasSinParche, Pendientes, PendientesSeguridad, PendientesCriticas, CVEExplotados, Fallidas30Dias, ReinicioPendiente,
     UltimoInicio, DiasEncendido, WSUS, ClienteSCCM, AgenteEPC, SentinelOne, SMB1, FirewallApagado, LibreC_GB |
     ParaCsv | Export-Csv $archivoCsv -NoTypeInformation -Encoding UTF8 -Delimiter ';'
@@ -455,7 +510,7 @@ $tarjetas = foreach ($e in 'Crítico', 'Atención', 'OK', 'Sin respuesta') {
 $filasHtml = foreach ($f in $filas) {
     $clase = ClaseEstado $f.Estado
     if ($f.Estado -eq 'Sin respuesta') {
-        "<tr><td>$(Codificar $f.Servidor)</td><td><span class='estado $clase'>$(Codificar $f.Estado)</span></td><td colspan='9'>$(Codificar $f.Motivos)</td></tr>"
+        "<tr><td>$(Codificar $f.Servidor)</td><td><span class='estado $clase'>$(Codificar $f.Estado)</span></td><td>$(Codificar $f.Motivos)</td><td><ol class='hacer'><li>Comprobar que el servidor está encendido y responde a WinRM (Test-WSMan). Si dice Access is denied, revisar si tiene el remoting deshabilitado (NETWORK AccessDenied) y ejecutar Enable-PSRemoting con aprobación de Seguridad.</li></ol></td><td colspan='8'></td></tr>"
         continue
     }
     $pend = if ($null -eq $f.Pendientes) { '—' } else {
@@ -466,8 +521,9 @@ $filasHtml = foreach ($f in $filas) {
     $soporte = if ($f.FinSoporte) { FormatoFecha $f.FinSoporte 'dd/MM/yyyy' } else { '—' }
     $motivos = if ($f.Motivos) { Codificar $f.Motivos } else { '—' }
     $config  = if ($f.Configuracion) { Codificar $f.Configuracion } else { '—' }
+    $queHacer = if ($f.Recomendaciones) { "<ol class='hacer'>$(($f.Recomendaciones | ForEach-Object { "<li>$(Codificar $_)</li>" }) -join '')</ol>" } else { '—' }
     @"
-<tr><td>$(Codificar $f.Servidor)<br><small>$(Codificar $f.Sistema)</small></td><td><span class='estado $clase'>$(Codificar $f.Estado)</span></td><td>$motivos</td>
+<tr><td>$(Codificar $f.Servidor)<br><small>$(Codificar $f.Sistema)</small></td><td><span class='estado $clase'>$(Codificar $f.Estado)</span></td><td>$motivos</td><td>$queHacer</td>
 <td>$(Codificar $f.Build)<br><small>Soporte hasta $soporte</small></td><td>$parche</td><td>$pend</td><td>$($f.Fallidas30Dias)</td><td>$inicio</td>
 <td>$(Codificar $f.SentinelOne)</td><td>$(Codificar $f.LibreC_GB) GB</td><td>$config</td></tr>
 "@
@@ -517,7 +573,7 @@ $html = @"
  th{background:#f3f3f3;position:sticky;top:0} small{color:#666} a{color:#0b5cad} a.explotada{color:#a4161a;font-weight:700}
  .estado{border-radius:4px;padding:2px 8px;font-weight:600;white-space:nowrap}
  .critico{background:#fde2e1;color:#a4161a} .atencion{background:#fff3cd;color:#7a5a00} .ok{background:#dcf5e3;color:#1b6b34} .sinresp{background:#e7e7e7;color:#444}
- details summary{cursor:pointer;color:#0b5cad}
+ details summary{cursor:pointer;color:#0b5cad} ol.hacer{margin:0;padding-left:18px} ol.hacer li{margin-bottom:4px}
 </style></head><body>
 <h1>Estado de parches de servidores</h1>
 <p class="sub">Generado el $(Get-Date -Format 'dd/MM/yyyy HH:mm') desde $env:COMPUTERNAME · $($filas.Count) servidores · Atención a partir de $DiasAtencion días sin parches, crítico a partir de $DiasCritico.</p>
@@ -525,7 +581,7 @@ $html = @"
 
 <h2>Servidores</h2>
 <p class="sub">"Configuración" muestra hallazgos de seguridad que no dependen de parches; no cambian el estado.</p>
-<table><thead><tr><th>Servidor</th><th>Estado</th><th>Motivos</th><th>Build</th><th>Último parche</th><th>Pendientes</th><th>Fallidas (30 d)</th><th>Último inicio</th><th>SentinelOne</th><th>Libre C:</th><th>Configuración</th></tr></thead>
+<table><thead><tr><th>Servidor</th><th>Estado</th><th>Motivos</th><th>Qué hacer</th><th>Build</th><th>Último parche</th><th>Pendientes</th><th>Fallidas (30 d)</th><th>Último inicio</th><th>SentinelOne</th><th>Libre C:</th><th>Configuración</th></tr></thead>
 <tbody>
 $($filasHtml -join "`n")
 </tbody></table>
@@ -542,6 +598,10 @@ $html | Out-File $archivoHtml -Encoding UTF8
 # ---------------------------------------------------------------- resumen en consola
 
 $filas | Format-Table Servidor, Estado, Build, DiasSinParche, Pendientes, PendientesCriticas, ReinicioPendiente, Motivos -AutoSize -Wrap
+foreach ($f in $filas | Where-Object { $_.Recomendaciones }) {
+    Write-Host "$($f.Servidor) - qué hacer:" -ForegroundColor Cyan
+    $i = 0; foreach ($t in $f.Recomendaciones) { $i++; Write-Host "  $i. $t" }
+}
 if ($kbAgrupados) {
     Write-Host 'KB pendientes:' -ForegroundColor Cyan
     $kbAgrupados | Format-Table KB, Severidad, @{ n = 'Explotada'; e = { if ($_.Explotadas) { 'SÍ' } else { '' } } }, Publicado,
