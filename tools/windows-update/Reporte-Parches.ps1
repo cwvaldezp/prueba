@@ -333,11 +333,13 @@ $filas = foreach ($nombre in $Servidores) {
     }
     if ($explotadas.Count) {
         $criticos += "Falta el parche de $(Plural $explotadas.Count 'vulnerabilidad explotada' 'vulnerabilidades explotadas') activamente"
-        & $hacer 1 'Instalar YA los KB marcados como "Explotada activamente" (ver tabla de KB) y reiniciar, sin esperar la ventana mensual.'
+        $kbExp = @($pend | Where-Object { $_.Explotadas } | ForEach-Object KB | Sort-Object -Unique) -join ', '
+        & $hacer 1 "Instalar YA $kbExp (corrige $($explotadas -join ', '), explotada activamente) y reiniciar, sin esperar la ventana mensual."
     }
     if ($criticas.Count) {
         $criticos += "$(Plural $criticas.Count 'actualización CRÍTICA pendiente' 'actualizaciones CRÍTICAS pendientes')"
-        & $hacer 2 'Instalar las actualizaciones críticas desde Settings > Windows Update y reiniciar en la próxima ventana de mantenimiento.'
+        # Si ya se pidió instalar YA por una vulnerabilidad explotada, esta recomendación sobra
+        if (-not $explotadas.Count) { & $hacer 2 'Instalar las actualizaciones críticas desde Settings > Windows Update y reiniciar en la próxima ventana de mantenimiento.' }
     } elseif ($seguridad.Count) {
         $avisos += "$(Plural $seguridad.Count 'actualización de seguridad pendiente' 'actualizaciones de seguridad pendientes')"
         & $hacer 3 'Instalar las actualizaciones de seguridad desde Settings > Windows Update en la próxima ventana de mantenimiento.'
@@ -369,7 +371,7 @@ $filas = foreach ($nombre in $Servidores) {
     }
     if ($d.ClienteSCCM) {
         $avisos += 'Cliente SCCM todavía instalado'
-        & $hacer 1 'Ejecutar Reparar-WindowsUpdate.ps1 en el servidor para desinstalar el cliente SCCM (antes de instalar parches).'
+        & $hacer 0 'Primero: ejecutar Reparar-WindowsUpdate.ps1 en el servidor para desinstalar el cliente SCCM y dejar Windows Update funcionando.'
     }
     if ($d.LibreC_GB -lt 10) {
         $avisos += "Poco espacio en C: ($($d.LibreC_GB) GB)"
@@ -468,8 +470,12 @@ $filas | Select-Object Servidor, Estado, Motivos, @{ n = 'Recomendaciones'; e = 
     ParaCsv | Export-Csv $archivoCsv -NoTypeInformation -Encoding UTF8 -Delimiter ';'
 $kbPendientes | Select-Object Servidor, KB, Titulo, Clase, Severidad, Publicado, CVE, Explotadas, Descargada | ParaCsv |
     Export-Csv $archivoCsvKb -NoTypeInformation -Encoding UTF8 -Delimiter ';'
-$fallidasTodas | Select-Object Servidor, Fecha, Titulo, Codigo |
-    Export-Csv $archivoCsvFallo -NoTypeInformation -Encoding UTF8 -Delimiter ';'
+if ($fallidasTodas.Count) {
+    $fallidasTodas | Select-Object Servidor, Fecha, Titulo, Codigo |
+        Export-Csv $archivoCsvFallo -NoTypeInformation -Encoding UTF8 -Delimiter ';'
+} else {
+    '"Servidor";"Fecha";"Titulo";"Codigo"' | Out-File $archivoCsvFallo -Encoding UTF8
+}
 
 function ClaseEstado([string]$e) {
     switch ($e) { 'Crítico' { 'critico' } 'Atención' { 'atencion' } 'OK' { 'ok' } default { 'sinresp' } }
