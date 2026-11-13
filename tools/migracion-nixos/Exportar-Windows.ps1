@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Recolecta todo lo migrable de este Windows hacia una carpeta, para llevarlo a NixOS.
 
