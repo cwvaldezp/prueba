@@ -28,7 +28,11 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 - `-CarpetasExtra`: cualquier carpeta fuera de tu perfil donde tengas scripts (C:\Scripts, D:\Tools…).
 - `-IncluirSecretos`: copia `.ssh`, `.aws`, `.azure`, `.kube`, `.git-credentials` y perfiles Wi‑Fi con clave. Sin esto solo se listan.
 
-Resultado en el Escritorio: `migracion-nixos-AAAAMMDD-HHMM\` + `.7z` (o `.zip`). Mira `AVISOS.txt`.
+Resultado: `C:\migracion-nixos-AAAAMMDD-HHMM\` + `.7z` (o `.zip`). Mira `AVISOS.txt`. El script se niega a escribir dentro de OneDrive/Dropbox, porque la exportación lleva secretos.
+
+### Archivos de OneDrive "solo en línea"
+
+Si Documentos o Escritorio están en OneDrive, los archivos que solo están en la nube no se pueden descargar desde una consola de Administrador ("El proveedor de archivos de nube no se está ejecutando"). El script los salta y los lista en `archivos-solo-en-nube.txt`. Para incluirlos: en el Explorador, clic derecho sobre la carpeta de OneDrive (Documentos/Escritorio) → **Mantener siempre en este dispositivo**, espera a que termine de descargar y vuelve a ejecutar el script.
 
 ### Qué se recoge
 

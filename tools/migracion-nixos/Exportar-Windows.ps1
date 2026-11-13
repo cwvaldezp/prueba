@@ -29,7 +29,7 @@
     Usa -Usuarios * para todos los perfiles de C:\Users.
 
 .PARAMETER Destino
-    Carpeta donde se deja todo. Por defecto: Escritorio\migracion-nixos-<fecha>.
+    Carpeta donde se deja todo. Por defecto: C:\migracion-nixos-<fecha> (local, nunca en OneDrive).
 
 .PARAMETER CarpetasExtra
     Carpetas adicionales donde tengas scripts (p. ej. C:\Scripts, D:\Tools).
@@ -45,7 +45,7 @@
 [CmdletBinding()]
 param(
     [string[]] $Usuarios = @($env:USERNAME, '00210460', 'srvaccount'),
-    [string]   $Destino = (Join-Path ([Environment]::GetFolderPath('Desktop')) ("migracion-nixos-" + (Get-Date -Format 'yyyyMMdd-HHmm'))),
+    [string]   $Destino = (Join-Path $env:SystemDrive ("migracion-nixos-" + (Get-Date -Format 'yyyyMMdd-HHmm'))),
     [string[]] $CarpetasExtra = @(),
     [switch]   $IncluirSecretos,
     [int]      $MaxMBPorScript = 5
@@ -69,10 +69,20 @@ function Copy-Seguro {
         & robocopy @rcArgs | Out-Null
         if ($LASTEXITCODE -ge 8) { Add-Aviso "robocopy tuvo errores copiando $Origen (código $LASTEXITCODE)" }
     } else {
+        if (Test-SoloNube $item) { $script:SoloNube.Add($Origen); return $false }
         try { Copy-Item -LiteralPath $Origen -Destination $DestinoDir -Force -ErrorAction Stop }
         catch { Add-Aviso "No se pudo copiar $Origen : $($_.Exception.Message)" ; return $false }
     }
     return $true
+}
+
+# Archivos de OneDrive "solo en línea": no están en el disco y, desde una consola
+# de Administrador, OneDrive no puede descargarlos ("El proveedor de archivos de
+# nube no se está ejecutando"). Se saltan y se listan en archivos-solo-en-nube.txt.
+$script:SoloNube = New-Object System.Collections.Generic.List[string]
+function Test-SoloNube($fi) {
+    # OFFLINE (0x1000) | RECALL_ON_OPEN (0x40000) | RECALL_ON_DATA_ACCESS (0x400000)
+    ([int64]$fi.Attributes -band 0x441000) -ne 0
 }
 
 function Test-EsAdmin {
@@ -83,6 +93,10 @@ function Test-EsAdmin {
 # ---------------------------------------------------------------------------
 if (-not (Test-EsAdmin)) {
     Write-Warning "No estás como Administrador: solo podré leer tu propio perfil."
+}
+if ($Destino -match 'OneDrive|Dropbox|Google Drive|iCloud') {
+    Write-Error "El destino '$Destino' está en una carpeta sincronizada con la nube. La exportación lleva contraseñas y llaves: usa una carpeta local, p. ej. -Destino C:\migracion-nixos"
+    return
 }
 New-Item -ItemType Directory -Force -Path $Destino | Out-Null
 Start-Transcript -Path (Join-Path $Destino 'log-exportacion.txt') -Force | Out-Null
@@ -150,7 +164,8 @@ foreach ($perfil in $perfilesElegidos) {
     }
 
     # --- Scripts sueltos --------------------------------------------------
-    $buscarEn = @($docs) + @((Join-Path $home_ 'Desktop'), (Join-Path $home_ 'Downloads'), (Join-Path $home_ 'Scripts'), (Join-Path $home_ 'source'), (Join-Path $home_ 'repos'))
+    $oneDrives = @(Get-ChildItem -LiteralPath $home_ -Directory -Filter 'OneDrive*' -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'Desktop'; Join-Path $_.FullName 'Escritorio' })
+    $buscarEn = @($docs) + $oneDrives + @((Join-Path $home_ 'Desktop'), (Join-Path $home_ 'Downloads'),(Join-Path $home_ 'Scripts'), (Join-Path $home_ 'source'), (Join-Path $home_ 'repos'))
     $extensiones = '*.ps1', '*.psm1', '*.psd1', '*.bat', '*.cmd', '*.sh', '*.py', '*.vbs'
     $dScripts = Join-Path $out 'scripts'
     $n = 0
@@ -160,9 +175,11 @@ foreach ($perfil in $perfilesElegidos) {
             ForEach-Object {
                 $rel = $_.FullName.Substring($home_.Length).TrimStart('\')
                 $dst = Join-Path $dScripts $rel
+                if (Test-SoloNube $_) { $script:SoloNube.Add($_.FullName); return }
                 New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
-                Copy-Item -LiteralPath $_.FullName -Destination $dst -Force
-                $n++
+                $ruta = $_.FullName
+                try { Copy-Item -LiteralPath $ruta -Destination $dst -Force -ErrorAction Stop; $n++ }
+                catch { $script:SoloNube.Add($ruta) }
             }
     }
     Write-Host "  scripts copiados: $n"
@@ -327,6 +344,10 @@ if ($todo) {
         Set-Content -LiteralPath (Join-Path $Destino 'historial-unificado.txt') -Encoding UTF8
 }
 
+if ($script:SoloNube.Count -gt 0) {
+    $script:SoloNube | Sort-Object -Unique | Set-Content -LiteralPath (Join-Path $Destino 'archivos-solo-en-nube.txt') -Encoding UTF8
+    Add-Aviso "$($script:SoloNube.Count) archivos estaban solo en OneDrive y no se copiaron (lista en archivos-solo-en-nube.txt). Ver README: 'Mantener siempre en este dispositivo' y volver a ejecutar."
+}
 $script:Avisos | Set-Content -LiteralPath (Join-Path $Destino 'AVISOS.txt') -Encoding UTF8
 Stop-Transcript | Out-Null
 
