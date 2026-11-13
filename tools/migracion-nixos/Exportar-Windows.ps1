@@ -179,7 +179,7 @@ foreach ($perfil in $perfilesElegidos) {
             Where-Object { ($extensiones + '.kdbx', '.keyx') -contains $_.Extension.ToLower() }
     })
     $archivosPerfil | Where-Object { $extensiones -contains $_.Extension.ToLower() } |
-            Where-Object { $_.Length -le ($MaxMBPorScript * 1MB) -and $_.FullName -notmatch '\\(node_modules|\.git|\.venv|venv|site-packages|WindowsPowerShell\\Modules|PowerShell\\Modules)\\' } |
+            Where-Object { $_.Length -le ($MaxMBPorScript * 1MB) -and $_.FullName -notmatch '\\(node_modules|\.git|\.venv|venv|site-packages|packages|bin|obj|WindowsPowerShell\\Modules|PowerShell\\Modules)\\' } |
             ForEach-Object {
                 $rel = $_.FullName.Substring($home_.Length).TrimStart('\')
                 $dst = Join-Path $dScripts $rel
