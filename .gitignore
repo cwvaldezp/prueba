@@ -4,3 +4,6 @@ node_modules/
 .DS_Store
 tools/voces/
 __pycache__/
+migracion-nixos-*/
+migracion-nixos-*.zip
+migracion-nixos-*.7z
