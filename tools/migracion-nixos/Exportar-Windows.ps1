@@ -99,6 +99,8 @@ if ($Destino -match 'OneDrive|Dropbox|Google Drive|iCloud') {
     return
 }
 New-Item -ItemType Directory -Force -Path $Destino | Out-Null
+# Por si una ejecución anterior se cortó con Ctrl+C y dejó la grabación abierta
+try { Stop-Transcript -ErrorAction Stop | Out-Null } catch {}
 Start-Transcript -Path (Join-Path $Destino 'log-exportacion.txt') -Force | Out-Null
 Write-Paso "Destino: $Destino"
 
@@ -166,11 +168,17 @@ foreach ($perfil in $perfilesElegidos) {
     # --- Scripts sueltos --------------------------------------------------
     $oneDrives = @(Get-ChildItem -LiteralPath $home_ -Directory -Filter 'OneDrive*' -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'Desktop'; Join-Path $_.FullName 'Escritorio' })
     $buscarEn = @($docs) + $oneDrives + @((Join-Path $home_ 'Desktop'), (Join-Path $home_ 'Downloads'),(Join-Path $home_ 'Scripts'), (Join-Path $home_ 'source'), (Join-Path $home_ 'repos'))
-    $extensiones = '*.ps1', '*.psm1', '*.psd1', '*.bat', '*.cmd', '*.sh', '*.py', '*.vbs'
+    # Nota: -Include no funciona con -LiteralPath en Windows PowerShell 5.1, por eso
+    # se recorre una sola vez y se filtra por extensión a mano.
+    $extensiones = '.ps1', '.psm1', '.psd1', '.bat', '.cmd', '.sh', '.py', '.vbs'
     $dScripts = Join-Path $out 'scripts'
     $n = 0
-    foreach ($raiz in ($buscarEn | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -Unique)) {
-        Get-ChildItem -LiteralPath $raiz -Recurse -File -Include $extensiones -Force -ErrorAction SilentlyContinue |
+    Write-Host "  buscando scripts y bases .kdbx (puede tardar)..."
+    $archivosPerfil = @(foreach ($raiz in ($buscarEn | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -Unique)) {
+        Get-ChildItem -LiteralPath $raiz -Recurse -File -Force -ErrorAction SilentlyContinue |
+            Where-Object { ($extensiones + '.kdbx', '.keyx') -contains $_.Extension.ToLower() }
+    })
+    $archivosPerfil | Where-Object { $extensiones -contains $_.Extension.ToLower() } |
             Where-Object { $_.Length -le ($MaxMBPorScript * 1MB) -and $_.FullName -notmatch '\\(node_modules|\.git|\.venv|venv|site-packages|WindowsPowerShell\\Modules|PowerShell\\Modules)\\' } |
             ForEach-Object {
                 $rel = $_.FullName.Substring($home_.Length).TrimStart('\')
@@ -181,7 +189,6 @@ foreach ($perfil in $perfilesElegidos) {
                 try { Copy-Item -LiteralPath $ruta -Destination $dst -Force -ErrorAction Stop; $n++ }
                 catch { $script:SoloNube.Add($ruta) }
             }
-    }
     Write-Host "  scripts copiados: $n"
 
     # --- VS Code (y variantes) -------------------------------------------
@@ -240,10 +247,8 @@ foreach ($perfil in $perfilesElegidos) {
         $rutas | Set-Content -LiteralPath (Join-Path $dKp 'rutas-originales.txt') -Encoding UTF8
     }
     # Por si hay .kdbx que el ini no menciona
-    foreach ($raiz in ($buscarEn | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -Unique)) {
-        Get-ChildItem -LiteralPath $raiz -Recurse -File -Include '*.kdbx', '*.keyx' -Force -ErrorAction SilentlyContinue | ForEach-Object {
-            if (Copy-Seguro $_.FullName (Join-Path $out 'keepassxc\bases')) { Write-Host "  KeePassXC: encontrado $($_.FullName)" }
-        }
+    $archivosPerfil | Where-Object { '.kdbx', '.keyx' -contains $_.Extension.ToLower() } | ForEach-Object {
+        if (Copy-Seguro $_.FullName (Join-Path $out 'keepassxc\bases')) { Write-Host "  KeePassXC: encontrado $($_.FullName)" }
     }
 
     # --- Windows Terminal, git, ssh y otros dotfiles ---------------------
